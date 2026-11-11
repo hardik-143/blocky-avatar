@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>Blockling Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a dressing-room tool. Live 3D stage on the left, wardrobe panel with tabs on the right; stacks on phones. */
+  :root {
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --fg: #151b28;
+    --muted: #5a6478;
+    --line: #d8dee8;
+    --chip: #f1f4f9;
+    --accent: #2a5bd7;
+    --accent-ink: #ffffff;
+    --stage-top: #cfe2ff;
+    --stage-bottom: #f5efe5;
+    --platform: #ffffff;
+    --platform-edge: #d4dae6;
+    --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c1018; --panel: #131a27; --fg: #e7ecf5; --muted: #98a3b9; --line: #263046; --chip: #1a2234;
+      --accent: #8aa8ff; --accent-ink: #0c1018; --stage-top: #1a2643; --stage-bottom: #0f131c; --platform: #2a3550; --platform-edge: #1a2235;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1018; --panel: #131a27; --fg: #e7ecf5; --muted: #98a3b9; --line: #263046; --chip: #1a2234;
+    --accent: #8aa8ff; --accent-ink: #0c1018; --stage-top: #1a2643; --stage-bottom: #0f131c; --platform: #2a3550; --platform-edge: #1a2235;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+  [hidden] { display: none !important; }
+  .app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 440px; }
+  .stage { position: relative; min-height: 0; background: linear-gradient(180deg, var(--stage-top), var(--stage-bottom)); }
+  #view { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; }
+  #view:active { cursor: grabbing; }
+  #view:focus-visible { box-shadow: inset 0 0 0 3px var(--accent); }
+
+  .stage-head { position: absolute; top: 14px; left: max(16px, env(safe-area-inset-left, 0px)); right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none; }
+  .stage-head h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; letter-spacing: 0.01em; }
+  .stage-head p { margin: 2px 0 0; color: var(--muted); font-size: 0.84rem; }
+  .playing { pointer-events: auto; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 0.82rem; box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+  .playing b { font-family: var(--font-display); }
+  .stage-foot { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); right: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; pointer-events: none; }
+  .stage-foot > * { pointer-events: auto; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+  .seg button { border: 0; background: transparent; }
+
+  button { font: 600 0.84rem/1 var(--font-display); letter-spacing: 0.02em; color: var(--fg); background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"], button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .float { box-shadow: 0 4px 14px rgba(0,0,0,.1); background: var(--panel); }
+  .small { padding: 5px 9px; font-size: 0.74rem; border-radius: 999px; }
+
+  .panel { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; padding-block: 12px 10px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+  .tabs button { flex: none; background: transparent; border-color: transparent; }
+  .tabs button[aria-selected="true"] { background: var(--accent); }
+  .content { overflow-y: auto; padding-block: 16px 28px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+  .sec { display: flex; flex-direction: column; gap: 9px; }
+  .sec h2 { margin: 0; font-family: var(--font-display); font-size: 0.74rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); display: flex; justify-content: space-between; }
+  .sec h2 small { text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-weight: 500; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+  .tiles button { font-size: 0.8rem; padding: 10px 6px; min-height: 40px; }
+  .tiles.emotes { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .tiles.emotes button { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .tiles.emotes button span { font: 500 0.68rem var(--font-body); opacity: .7; letter-spacing: 0; }
+  .colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .colors button { width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 2px solid var(--line); }
+  .colors button[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 2px var(--panel) inset; }
+  .colors input { width: 34px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: none; cursor: pointer; }
+  .colors input::-webkit-color-swatch-wrapper { padding: 3px; }
+  .colors input::-webkit-color-swatch { border: none; border-radius: 5px; }
+  .note { color: var(--muted); font-size: 0.8rem; line-height: 1.45; margin: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+  .presets button { text-align: left; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .presets button span { font: 400 0.72rem var(--font-body); color: var(--muted); letter-spacing: 0; }
+  textarea { width: 100%; min-height: 64px; font: 0.78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--chip); color: var(--fg); resize: vertical; box-sizing: border-box; }
+  input[type="number"] { width: 80px; font: 0.9rem var(--font-body); padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--chip); color: var(--fg); }
+  .toast { min-height: 1.2em; font-size: 0.8rem; color: var(--accent); }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 50vh minmax(0, 1fr); }
+    .panel { border-left: 0; border-top: 1px solid var(--line); }
+    .stage-head p { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="app">
+  <section class="stage" aria-label="Avatar preview">
+    <canvas id="view" tabindex="0" aria-label="3D avatar preview. Drag to rotate the camera, scroll to zoom."></canvas>
+    <div class="stage-head">
+      <div><h1>Blockling Studio</h1><p>Drag to orbit · scroll to zoom</p></div>
+      <div class="playing" id="playing" hidden><span>Playing <b id="playingName">Wave</b></span><button type="button" class="small" id="stopEmote">Stop</button></div>
+    </div>
+    <div class="stage-foot">
+      <div class="seg" role="group" aria-label="Movement preview">
+        <button type="button" id="mv-idle" data-motion="idle" aria-pressed="true">Idle</button>
+        <button type="button" id="mv-walk" data-motion="walk" aria-pressed="false">Walk</button>
+        <button type="button" id="mv-run" data-motion="run" aria-pressed="false">Run</button>
+        <button type="button" id="mv-jump" data-motion="jump" aria-pressed="false">Jump</button>
+      </div>
+      <button type="button" class="float" id="spinBtn" aria-pressed="true">Turntable</button>
+      <button type="button" class="float" id="randBtn">Randomize</button>
+    </div>
+  </section>
+
+  <aside class="panel" aria-label="Wardrobe">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="content" role="tabpanel" id="content"></div>
+  </aside>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ================= math ================= */
+  const TAU = Math.PI * 2;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const rotX = a => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, -s, 0, s, c]; };
+  const rotY = a => { const c = Math.cos(a), s = Math.sin(a); return [c, 0, s, 0, 1, 0, -s, 0, c]; };
+  const rotZ = a => { const c = Math.cos(a), s = Math.sin(a); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
+  function mul(a, b) { const r = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]; return r; }
+  const mv = (m, v) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
+  const euler = e => mul(rotY(e[1]), mul(rotX(e[0]), rotZ(e[2])));
+  const child = (p, off, rot) => ({ m: rot ? mul(p.m, rot) : p.m, t: add(p.t, mv(p.m, off)) });
+  const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+  /* ================= colors ================= */
+  const hexRgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const rgbStr = (c, k = 1, a = 1) => `rgba(${Math.round(clamp(c[0] * k, 0, 255))},${Math.round(clamp(c[1] * k, 0, 255))},${Math.round(clamp(c[2] * k, 0, 255))},${a})`;
+  const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const WHITE = [255, 255, 255], INK = [27, 27, 38], GOLD = [242, 190, 60];
+  const probe = document.createElement("span"); probe.style.display = "none"; document.body.appendChild(probe);
+  const cssColor = s => { probe.style.color = ""; probe.style.color = s.trim(); const m = getComputedStyle(probe).color.match(/[\d.]+/g) || [0, 0, 0]; return [+m[0], +m[1], +m[2]]; };
+  let TH = {};
+  function readTheme() { const cs = getComputedStyle(document.documentElement); TH = { platform: cssColor(cs.getPropertyValue("--platform")), edge: cssColor(cs.getPropertyValue("--platform-edge")), accent: cssColor(cs.getPropertyValue("--accent")) }; }
+  readTheme();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
+  new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  /* ================= catalog ================= */
+  const O = (...pairs) => pairs.map(p => ({ v: p[0], l: p[1] }));
+  const CAT = {
+    body: O(["classic", "Classic"], ["slim", "Slim"], ["broad", "Broad"], ["tall", "Tall"], ["short", "Short"], ["chunky", "Chunky"]),
+    head: O(["block", "Block"], ["big", "Big"], ["wide", "Wide"], ["tall", "Tall"], ["mini", "Mini"]),
+    eyes: O(["round", "Round"], ["dot", "Dot"], ["big", "Big"], ["anime", "Sparkly"], ["happy", "Happy"], ["sleepy", "Sleepy"], ["wink", "Wink"], ["star", "Star"], ["heart", "Heart"], ["angry", "Fierce"], ["cool", "Chill"], ["dizzy", "Dizzy"]),
+    brows: O(["none", "None"], ["normal", "Normal"], ["thick", "Thick"], ["raised", "Raised"], ["angry", "Angry"], ["worried", "Worried"]),
+    mouth: O(["smile", "Smile"], ["grin", "Grin"], ["big", "Big laugh"], ["teeth", "Teeth"], ["smirk", "Smirk"], ["flat", "Flat"], ["o", "Ooh"], ["tongue", "Tongue"], ["cat", "Cat"], ["frown", "Frown"], ["fangs", "Fangs"], ["kiss", "Kiss"]),
+    fx: O(["blush", "Blush"], ["freckles", "Freckles"], ["lashes", "Lashes"], ["bandaid", "Bandage"], ["paint", "Face paint"], ["mole", "Beauty mark"]),
+    facial: O(["none", "None"], ["stubble", "Stubble"], ["mustache", "Mustache"], ["goatee", "Goatee"], ["beard", "Beard"], ["fullbeard", "Full beard"]),
+    hair: O(["none", "Bald"], ["buzz", "Buzz"], ["short", "Short"], ["fringe", "Bangs"], ["spiky", "Spiky"], ["slick", "Quiff"], ["curly", "Curly"], ["afro", "Afro"], ["bob", "Bob"], ["long", "Long"], ["ponytail", "Ponytail"], ["bun", "Bun"], ["pigtails", "Pigtails"], ["mohawk", "Mohawk"], ["braids", "Braids"]),
+    hat: O(["none", "None"], ["cap", "Cap"], ["backcap", "Backwards cap"], ["beanie", "Beanie"], ["tophat", "Top hat"], ["cowboy", "Wide brim"], ["crown", "Crown"], ["wizard", "Wizard"], ["chef", "Chef"], ["party", "Party"], ["headphones", "Headphones"], ["bandana", "Headband"], ["helmet", "Space helmet"], ["catears", "Cat ears"], ["bunny", "Bunny ears"], ["horns", "Horns"], ["halo", "Halo"], ["antenna", "Antenna"], ["viking", "Horned helm"]),
+    glasses: O(["none", "None"], ["round", "Round"], ["square", "Square"], ["nerd", "Thick"], ["shades", "Shades"], ["heart", "Heart"], ["star", "Star"], ["visor", "Visor"], ["monocle", "Monocle"], ["goggles", "Goggles"]),
+    top: O(["tee", "T-shirt"], ["longsleeve", "Long sleeve"], ["tank", "Tank"], ["hoodie", "Hoodie"], ["jacket", "Jacket"], ["suit", "Suit"], ["sweater", "Sweater"], ["polo", "Polo"], ["jersey", "Jersey"], ["overalls", "Overalls"], ["dress", "Dress"], ["robe", "Robe"], ["spacesuit", "Space suit"]),
+    pattern: O(["solid", "Solid"], ["stripes", "Stripes"], ["vstripes", "Pinstripe"], ["dots", "Dots"], ["checker", "Checker"], ["camo", "Camo"], ["twotone", "Two-tone"], ["star", "Star"], ["heart", "Heart"], ["bolt", "Bolt"], ["smiley", "Smiley"]),
+    bottom: O(["pants", "Pants"], ["jeans", "Jeans"], ["ripped", "Ripped"], ["cargo", "Cargo"], ["track", "Track pants"], ["shorts", "Shorts"], ["skirt", "Skirt"]),
+    shoes: O(["sneakers", "Sneakers"], ["hightops", "High-tops"], ["boots", "Boots"], ["sandals", "Sandals"], ["slippers", "Slippers"], ["barefoot", "Barefoot"]),
+    acc: O(["backpack", "Backpack"], ["jetpack", "Jetpack"], ["guitar", "Guitar"], ["cape", "Cape"], ["wings", "Wings"], ["tail", "Tail"], ["scarf", "Scarf"], ["necklace", "Chain"], ["bowtie", "Bow tie"], ["belt", "Belt"], ["wristbands", "Wristbands"], ["earrings", "Earrings"], ["satchel", "Satchel"], ["balloon", "Balloon"]),
+  };
+  const BACK_SLOT = ["backpack", "jetpack", "guitar"];
+  const EMOTES = [
+    ["wave", "Wave"], ["dance", "Disco"], ["robot", "Robot"], ["shuffle", "Shuffle"], ["wiggle", "Wiggle"], ["cheer", "Cheer"],
+    ["clap", "Clap"], ["bow", "Bow"], ["salute", "Salute"], ["point", "Point"], ["laugh", "Laugh"], ["shrug", "Shrug"],
+    ["facepalm", "Facepalm"], ["think", "Think"], ["cry", "Cry"], ["angry", "Stomp"], ["heart", "Love"], ["flex", "Flex"],
+    ["airguitar", "Air guitar"], ["kick", "Kick"], ["jacks", "Jumping jacks"], ["pushups", "Push-ups"], ["spin", "Spin"], ["stretch", "Stretch"],
+    ["sit", "Sit"], ["sleep", "Nap"], ["meditate", "Float"], ["zombie", "Zombie"],
+  ];
+  const PAL = {
+    skin: ["#ffe0c7", "#f6c9a4", "#f0c39b", "#d9a175", "#c08457", "#9c6640", "#7a4a2c", "#4f2f1d", "#a3d977", "#8fb8ff", "#c8b6ff", "#b9bec8"],
+    hair: ["#1d1a1a", "#3b2a20", "#6b4329", "#a8672f", "#d9a441", "#f2dc8f", "#e9e4dc", "#9aa0a8", "#e2554a", "#ff7eb6", "#7b4dd6", "#2f7de1", "#2fbf8f"],
+    eye: ["#2b2a3a", "#4a2f1e", "#2f6fd6", "#2a9d6e", "#7a4dd6", "#d64545", "#e2a62e", "#18a3b3"],
+    lip: ["#5a2a33", "#2b2a3a", "#c2334a", "#e46a8c", "#8e3fb0", "#b5654a"],
+    cloth: ["#ff6a3d", "#e2554a", "#f2b822", "#2fbf8f", "#2a9d6e", "#2f7de1", "#2a5bd7", "#1f2a44", "#7b4dd6", "#ff7eb6", "#f4f3ee", "#c9ccd2", "#6b7280", "#2b2f3a", "#8b5e3c", "#d9c3a0"],
+  };
+  const DEFAULT = {
+    v: 1, body: "classic", head: "block", skin: "#f0c39b",
+    eyes: "round", eyeCol: "#2b2a3a", brows: "normal", mouth: "smile", lipCol: "#5a2a33", fx: ["blush"], facial: "none",
+    hair: "short", hairCol: "#3b2a20", hairCol2: "#d9a441",
+    hat: "none", hatCol: "#2a5bd7", hatCol2: "#f4f3ee", glasses: "none", glassCol: "#2b2f3a",
+    top: "hoodie", topCol: "#ff6a3d", topCol2: "#f4f3ee", pattern: "solid", number: 7,
+    bottom: "jeans", botCol: "#2f4a7a", botCol2: "#c9d6ee",
+    shoes: "sneakers", shoeCol: "#f4f3ee", soleCol: "#e2554a",
+    acc: [], accCol: "#7b4dd6",
+  };
+  const COLOR_KEYS = ["skin", "eyeCol", "lipCol", "hairCol", "hairCol2", "hatCol", "hatCol2", "glassCol", "topCol", "topCol2", "botCol", "botCol2", "shoeCol", "soleCol", "accCol"];
+  const HEX = /^#[0-9a-f]{6}$/i;
+  function cleanLook(src) {
+    const o = JSON.parse(JSON.stringify(DEFAULT));
+    if (!src || typeof src !== "object") return o;
+    for (const k of COLOR_KEYS) if (typeof src[k] === "string" && HEX.test(src[k])) o[k] = src[k].toLowerCase();
+    for (const k of ["body", "head", "eyes", "brows", "mouth", "facial", "hair", "hat", "glasses", "top", "pattern", "bottom", "shoes"])
+      if (CAT[k].some(x => x.v === src[k])) o[k] = src[k];
+    if (Array.isArray(src.fx)) o.fx = CAT.fx.map(x => x.v).filter(v => src.fx.includes(v));
+    if (Array.isArray(src.acc)) { o.acc = CAT.acc.map(x => x.v).filter(v => src.acc.includes(v)); const b = o.acc.filter(v => BACK_SLOT.includes(v)); if (b.length > 1) o.acc = o.acc.filter(v => !BACK_SLOT.includes(v) || v === b[0]); }
+    if (Number.isFinite(+src.number)) o.number = clamp(Math.round(+src.number), 0, 99);
+    return o;
+  }
+
+  const PRESETS = [
+    ["Skater", "Backwards cap, bolt tee, high-tops", { hat: "backcap", hatCol: "#2b2f3a", hair: "short", top: "tee", topCol: "#f2b822", topCol2: "#2b2f3a", pattern: "bolt", bottom: "shorts", botCol: "#6b7280", shoes: "hightops", shoeCol: "#e2554a", soleCol: "#f4f3ee", acc: ["backpack", "wristbands"], accCol: "#2a9d6e", mouth: "grin" }],
+    ["Wizard", "Starry robe and a long beard", { hat: "wizard", hatCol: "#7b4dd6", hatCol2: "#f2b822", hair: "long", hairCol: "#e9e4dc", hairCol2: "#9aa0a8", facial: "fullbeard", top: "robe", topCol: "#4b2e9a", topCol2: "#f2b822", pattern: "star", bottom: "pants", botCol: "#4b2e9a", shoes: "slippers", shoeCol: "#8b5e3c", eyes: "happy", brows: "thick", acc: [] }],
+    ["Space cadet", "Helmet, suit, jetpack", { hat: "helmet", hair: "buzz", top: "spacesuit", topCol: "#eef0f4", topCol2: "#e2554a", bottom: "pants", botCol: "#eef0f4", shoes: "boots", shoeCol: "#c9ccd2", soleCol: "#2b2f3a", acc: ["jetpack"], accCol: "#c9ccd2", eyes: "big", eyeCol: "#2f7de1" }],
+    ["Office hero", "Sharp suit, square glasses", { hair: "slick", hairCol: "#1d1a1a", top: "suit", topCol: "#1f2a44", topCol2: "#e2554a", bottom: "pants", botCol: "#1f2a44", shoes: "boots", shoeCol: "#2b2f3a", soleCol: "#1d1a1a", glasses: "square", glassCol: "#2b2f3a", mouth: "smirk", acc: ["satchel"], accCol: "#8b5e3c" }],
+    ["Rockstar", "Mohawk, jacket, guitar", { hair: "mohawk", hairCol: "#ff7eb6", hairCol2: "#7b4dd6", top: "jacket", topCol: "#2b2f3a", topCol2: "#e2554a", bottom: "ripped", botCol: "#2f4a7a", shoes: "boots", shoeCol: "#2b2f3a", glasses: "shades", acc: ["guitar", "necklace", "wristbands"], accCol: "#e2554a", mouth: "teeth", brows: "angry" }],
+    ["Chef", "Toque, mustache, checked pants", { hat: "chef", hatCol: "#f4f3ee", hair: "short", hairCol: "#3b2a20", facial: "mustache", top: "tee", topCol: "#f4f3ee", topCol2: "#2b2f3a", bottom: "pants", botCol: "#2b2f3a", shoes: "sneakers", shoeCol: "#2b2f3a", soleCol: "#f4f3ee", acc: ["scarf"], accCol: "#e2554a", eyes: "happy" }],
+    ["Royal", "Crown, cape, gowned", { hat: "crown", hatCol: "#f2b822", hatCol2: "#e2554a", hair: "long", hairCol: "#d9a441", top: "dress", topCol: "#7b4dd6", topCol2: "#f2b822", pattern: "dots", shoes: "slippers", shoeCol: "#f2b822", acc: ["cape", "necklace", "earrings"], accCol: "#c2334a", fx: ["blush", "lashes"], mouth: "smile" }],
+    ["Cozy", "Beanie, striped sweater, slippers", { hat: "beanie", hatCol: "#2a9d6e", hatCol2: "#f4f3ee", hair: "bob", hairCol: "#a8672f", top: "sweater", topCol: "#d9c3a0", topCol2: "#e2554a", pattern: "stripes", bottom: "track", botCol: "#6b7280", botCol2: "#f4f3ee", shoes: "slippers", shoeCol: "#ff7eb6", acc: ["scarf"], accCol: "#e2554a", eyes: "sleepy", fx: ["blush", "freckles"] }],
+    ["Sporty", "Number 23, headband, shorts", { hat: "bandana", hatCol: "#e2554a", hatCol2: "#f4f3ee", hair: "short", top: "jersey", topCol: "#2a5bd7", topCol2: "#f4f3ee", number: 23, bottom: "shorts", botCol: "#2a5bd7", shoes: "sneakers", shoeCol: "#f4f3ee", soleCol: "#2a5bd7", acc: ["wristbands"], accCol: "#e2554a", mouth: "grin", brows: "thick" }],
+    ["Cat café", "Ears, tail, overalls", { hat: "catears", hatCol: "#3b2a20", hair: "bob", hairCol: "#3b2a20", top: "overalls", topCol2: "#f4f3ee", botCol: "#ff7eb6", bottom: "pants", shoes: "sneakers", shoeCol: "#f4f3ee", acc: ["tail", "bowtie"], accCol: "#3b2a20", mouth: "cat", eyes: "anime", eyeCol: "#2a9d6e", fx: ["blush", "lashes"] }],
+    ["Angel", "Halo, wings, all white", { hat: "halo", hatCol: "#f2b822", hair: "curly", hairCol: "#f2dc8f", top: "dress", topCol: "#f4f3ee", topCol2: "#f2dc8f", pattern: "solid", shoes: "sandals", shoeCol: "#d9c3a0", acc: ["wings"], accCol: "#ffffff", eyes: "happy", fx: ["blush"] }],
+    ["Explorer", "Wide brim, cargo, satchel", { hat: "cowboy", hatCol: "#8b5e3c", hatCol2: "#2b2f3a", hair: "ponytail", hairCol: "#6b4329", top: "jacket", topCol: "#8b5e3c", topCol2: "#d9c3a0", bottom: "cargo", botCol: "#6b6a4a", shoes: "boots", shoeCol: "#4f2f1d", acc: ["satchel", "belt"], accCol: "#6b4329", facial: "stubble" }],
+  ];
+
+  /* ================= storage ================= */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("blockling:" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("blockling:" + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  };
+  let look = cleanLook(store.get("look", DEFAULT));
+  let C = {};   // rgb cache
+  function refreshColors() { C = {}; for (const k of COLOR_KEYS) C[k] = hexRgb(look[k]); }
+  refreshColors();
+  function setLook(next, save = true) { look = cleanLook(next); refreshColors(); if (save) store.set("look", look); renderPanel(); }
+  const encodeLook = l => "BL1." + btoa(unescape(encodeURIComponent(JSON.stringify(l)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  function decodeLook(s) {
+    const m = String(s).trim().match(/^BL1\.([A-Za-z0-9_-]+)$/);
+    if (!m) return null;
+    try { return cleanLook(JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")))))); } catch { return null; }
+  }
+
+  /* ================= proportions ================= */
+  const BODIES = {
+    classic: { tw: 2, th: 2, td: 1, aw: 1, ah: 2, lw: 1, lh: 2 },
+    slim: { tw: 1.7, th: 2, td: 0.85, aw: 0.8, ah: 2, lw: 0.85, lh: 2.1 },
+    broad: { tw: 2.5, th: 2.1, td: 1.2, aw: 1.15, ah: 2.05, lw: 1.05, lh: 2 },
+    tall: { tw: 2, th: 2.3, td: 1, aw: 0.95, ah: 2.35, lw: 1, lh: 2.6 },
+    short: { tw: 1.9, th: 1.6, td: 0.95, aw: 0.9, ah: 1.6, lw: 0.95, lh: 1.4 },
+    chunky: { tw: 2.4, th: 1.8, td: 1.4, aw: 1.1, ah: 1.8, lw: 1.15, lh: 1.6 },
+  };
+  const HEADS = { block: [1.2, 1.2, 1.2], big: [1.5, 1.5, 1.5], wide: [1.55, 1.15, 1.25], tall: [1.1, 1.45, 1.15], mini: [0.95, 0.95, 0.95] };
+  const dimsOf = l => { const b = BODIES[l.body], h = HEADS[l.head]; return Object.assign({ hw: h[0], hh: h[1], hd: h[2] }, b); };
+
+  /* ================= poses ================= */
+  const LIMBS = ["root", "torso", "head", "armL", "armR", "legL", "legR"];
+  const base = () => ({ lift: 0, sway: 0, fixW: 0, fixY: 0, fixL: 0, root: [0, 0, 0], torso: [0, 0, 0], head: [0, 0, 0], armL: [0, 0, 0.05], armR: [0, 0, -0.05], legL: [0, 0, 0], legR: [0, 0, 0] });
+  const sin = Math.sin, cos = Math.cos, abs = Math.abs, max = Math.max;
+  const A = {
+    idle(t) { const p = base(), b = sin(t * 1.8); p.torso = [0.015 * b, 0, 0]; p.head = [0.03 - 0.02 * b, 0.22 * sin(t * 0.45) * sin(t * 0.13 + 1), 0]; p.armL = [0.03 * b, 0, 0.05 + 0.015 * b]; p.armR = [0.03 * b, 0, -0.05 - 0.015 * b]; return p; },
+    walk(t, c) { const p = base(), s = sin(c.phase); p.legL = [-0.6 * s, 0, 0]; p.legR = [0.6 * s, 0, 0]; p.armL = [0.5 * s, 0, 0.07]; p.armR = [-0.5 * s, 0, -0.07]; p.torso = [0.04, 0.07 * s, 0]; p.head = [-0.03, -0.06 * s, 0]; return p; },
+    run(t, c) { const p = base(), s = sin(c.phase); p.legL = [-1 * s, 0, 0]; p.legR = [1 * s, 0, 0]; p.armL = [0.95 * s, 0, 0.2]; p.armR = [-0.95 * s, 0, -0.2]; p.torso = [0.2, 0.12 * s, 0]; p.head = [-0.16, -0.1 * s, 0]; p.lift = 0.3 * abs(s); p.mouthO = "grin"; return p; },
+    jump(t, c) { const p = base(), k = clamp(c.vy / 15, -1, 1), up = 0.5 + 1.9 * max(0, k) + 0.9 * max(0, -k); p.armL = [-0.25, 0, up]; p.armR = [-0.25, 0, -up]; p.legL = [-0.4, 0, 0.06]; p.legR = [0.25, 0, -0.06]; p.torso = [-0.06 * k, 0, 0]; p.head = [-0.12 * k, 0, 0]; p.mouthO = "big"; return p; },
+    wave(t) { const p = A.idle(t); p.armR = [-0.15, 0, -2.65 + 0.35 * sin(t * 9)]; p.head = [0.05, -0.25, -0.12]; p.torso = [0, -0.1, 0.03]; p.mouthO = "grin"; return p; },
+    dance(t) { const p = base(), b = t * TAU * 1.1, h = sin(b / 2), q = sin(b), a = (h + 1) / 2; p.root = [0, 0, 0.08 * h]; p.sway = 0.35 * h; p.torso = [0, 0.28 * sin(b / 2 + 0.6), 0]; p.head = [0.12 * abs(q) - 0.05, 0, -0.12 * h]; p.armL = [-(0.6 + 1.6 * a), 0, 0.3 + 0.5 * a]; p.armR = [-(0.6 + 1.6 * (1 - a)), 0, -(0.3 + 0.5 * (1 - a))]; p.legL = [0, 0, 0.22 * max(0, h)]; p.legR = [0, 0, -0.22 * max(0, -h)]; p.lift = 0.12 * abs(q); p.mouthO = "grin"; p.fx = "notes"; return p; },
+    robot(t) {
+      const seq = [[[-1.57, 0, 0.05], [0, 0, -0.05], 0.5, 0.15], [[-1.57, 0, 0.05], [-1.57, 0, -0.05], 0, 0], [[0, 0, 1.57], [0, 0, -1.57], -0.5, -0.15], [[-3, 0, 0.08], [0.05, 0, -0.05], 0.3, 0.1]];
+      const f = t * 2.2, i = Math.floor(f) % 4, j = (i + 3) % 4, k = Math.min(1, (f % 1) * 7);
+      const p = base(); const L = (a, b) => a.map((v, n) => lerp(v, b[n], k));
+      p.armL = L(seq[j][0], seq[i][0]); p.armR = L(seq[j][1], seq[i][1]); p.head = [0, lerp(seq[j][2], seq[i][2], k), 0]; p.torso = [0, lerp(seq[j][3], seq[i][3], k), 0];
+      p.mouthO = "flat"; p.eyeO = "cool"; return p;
+    },
+    shuffle(t) { const p = base(), b = t * TAU * 1.8, s = sin(b); p.legL = [-0.25 * max(0, s), 0, 0.45 * max(0, s)]; p.legR = [-0.25 * max(0, -s), 0, -0.45 * max(0, -s)]; p.lift = 0.18 * abs(sin(b)); p.armL = [0.5 * s, 0, 0.25]; p.armR = [0.5 * s, 0, -0.25]; p.torso = [0.05, 0.2 * s, 0]; p.head = [0.1 * abs(s) - 0.05, -0.15 * s, 0]; p.mouthO = "grin"; p.fx = "notes"; return p; },
+    wiggle(t) { const p = base(), b = t * TAU * 1.2, s = sin(b); p.root = [0, 0, 0.12 * s]; p.sway = 0.3 * s; p.armL = [-0.2, 0, 2.4 + 0.35 * sin(b * 2)]; p.armR = [-0.2, 0, -2.4 - 0.35 * sin(b * 2 + 1)]; p.head = [0, 0, -0.15 * s]; p.torso = [0, 0, -0.1 * s]; p.legL = [0, 0, 0.1 * max(0, s)]; p.legR = [0, 0, -0.1 * max(0, -s)]; p.mouthO = "tongue"; return p; },
+    cheer(t) { const p = base(), hop = abs(sin(t * Math.PI * 2.2)); p.lift = 0.75 * hop; p.armL = [-0.2, 0, 2.7 + 0.2 * sin(t * 22)]; p.armR = [-0.2, 0, -2.7 - 0.2 * sin(t * 22 + 1)]; p.legL = [0, 0, 0.16 * hop]; p.legR = [0, 0, -0.16 * hop]; p.head = [-0.18, 0, 0]; p.mouthO = "big"; p.eyeO = "happy"; p.fx = "sparkle"; return p; },
+    clap(t) { const p = A.idle(t), k = 0.5 + 0.5 * sin(t * 13); p.armL = [-1.25, 0, -(0.5 + 0.28 * k)]; p.armR = [-1.25, 0, 0.5 + 0.28 * k]; p.head = [-0.08, 0, 0]; p.mouthO = "grin"; p.eyeO = "happy"; return p; },
+    bow(t) { const p = A.idle(t), ph = (t % 2.6) / 2.6, a = Math.pow(sin(Math.PI * ph), 0.7); p.torso = [0.95 * a, 0, 0]; p.head = [0.25 * a, 0, 0]; p.armR = [-0.6 * a, 0, 0.3 * a]; p.armL = [0.35 * a, 0, 0.05]; p.mouthO = "smile"; p.eyeO = a > 0.4 ? "happy" : null; return p; },
+    salute(t) { const p = base(); p.armR = [-2.67, 0, 0.64]; p.armL = [0, 0, 0.02]; p.head = [-0.08, 0, 0]; p.torso = [-0.04, 0, 0]; p.mouthO = "flat"; p.browO = "angry"; return p; },
+    point(t) { const p = A.idle(t); p.armR = [-1.65 + 0.06 * sin(t * 6), 0, 0.05]; p.head = [0, 0.08, 0]; p.torso = [0, 0.12, 0]; p.mouthO = "smirk"; p.browO = "raised"; return p; },
+    laugh(t) { const p = base(), s = sin(t * 18); p.torso = [-0.18 + 0.05 * s, 0, 0]; p.head = [-0.32 + 0.05 * s, 0, 0]; p.armL = [-0.65, 0, -0.35]; p.armR = [-0.65, 0, 0.35]; p.lift = 0.04 * abs(s); p.mouthO = "big"; p.eyeO = "happy"; p.fx = "notes"; return p; },
+    shrug(t) { const p = base(), e = clamp(0.5 + 0.7 * sin(t * 2.6), 0, 1); p.armL = [-0.5, 0, 0.55 + 0.35 * e]; p.armR = [-0.5, 0, -(0.55 + 0.35 * e)]; p.head = [0, 0, 0.22 * e]; p.torso = [-0.04 * e, 0, 0]; p.mouthO = "flat"; p.browO = "raised"; return p; },
+    facepalm(t) { const p = base(); p.armR = [-2.58, 0, 0.85]; p.armL = [0.05, 0, 0.08]; p.head = [0.32 + 0.04 * sin(t * 2), 0, 0.12]; p.torso = [0.1, 0, 0]; p.mouthO = "flat"; p.eyeO = "closed"; p.browO = "worried"; return p; },
+    think(t) { const p = base(); p.armR = [-2.13, 0, 0.94]; p.armL = [-0.55, 0, -0.45]; p.head = [-0.15, 0.25 * sin(t * 0.8), 0.12]; p.torso = [0, 0.05, 0]; p.mouthO = "o"; p.browO = "raised"; return p; },
+    cry(t) { const p = base(), s = sin(t * 10); p.armR = [-2.63, 0, 0.72 + 0.08 * s]; p.armL = [-2.63, 0, -0.72 - 0.08 * s]; p.head = [0.25, 0, 0.05 * s]; p.torso = [0.1 + 0.02 * s, 0, 0]; p.mouthO = "frown"; p.eyeO = "closed"; p.browO = "worried"; p.fx = "tears"; return p; },
+    angry(t) { const p = base(), s = sin(t * TAU * 1.6); p.legL = [-0.38 * max(0, s), 0, 0]; p.legR = [-0.38 * max(0, -s), 0, 0]; p.armL = [0.15, 0, 0.35]; p.armR = [0.15, 0, -0.35]; p.torso = [0.12, 0, 0.04 * s]; p.head = [0.15, 0, 0.05 * s]; p.browO = "angry"; p.eyeO = "angry"; p.mouthO = "frown"; p.fx = "anger"; return p; },
+    heart(t) { const p = base(), s = sin(t * 2.5); p.armL = [-1.05, 0, -0.72]; p.armR = [-1.05, 0, 0.72]; p.head = [0.05, 0, 0.16 * s]; p.torso = [0, 0, 0.05 * s]; p.sway = 0.08 * s; p.eyeO = "heart"; p.mouthO = "smile"; p.fx = "hearts"; return p; },
+    flex(t) { const p = base(), k = 0.5 + 0.5 * sin(t * 5); p.armL = [-0.1, 0, 2.05 + 0.12 * k]; p.armR = [-0.1, 0, -2.05 - 0.12 * k]; p.torso = [-0.1, 0, 0]; p.head = [-0.08, 0, 0]; p.legL = [0, 0, 0.12]; p.legR = [0, 0, -0.12]; p.mouthO = "teeth"; p.browO = "thick"; p.fx = "sparkle"; return p; },
+    airguitar(t) { const p = base(); p.armL = [-1.1, 0, -0.35]; p.armR = [-0.55 + 0.3 * sin(t * 14), 0, 0.4]; p.head = [0.28 * abs(sin(t * 7)) - 0.05, 0, 0]; p.torso = [0.05 + 0.04 * sin(t * 7), 0, 0]; p.legL = [0, 0, 0.25]; p.legR = [0, 0, -0.25]; p.mouthO = "teeth"; p.eyeO = "closed"; p.fx = "notes"; return p; },
+    kick(t) { const p = base(), k = Math.pow(max(0, sin(t * TAU / 1.4)), 2); p.legR = [-1.45 * k, 0, 0]; p.legL = [0.08 * k, 0, 0]; p.armL = [-1.1, 0, -0.35]; p.armR = [-1.1 + 0.4 * k, 0, 0.35]; p.torso = [-0.12 * k, 0, 0]; p.mouthO = "grin"; p.browO = "angry"; return p; },
+    jacks(t) { const p = base(), a = 0.5 - 0.5 * cos(t * TAU * 1.4); p.armL = [0, 0, 0.15 + 2.75 * a]; p.armR = [0, 0, -0.15 - 2.75 * a]; p.legL = [0, 0, 0.34 * a]; p.legR = [0, 0, -0.34 * a]; p.lift = 0.3 * abs(sin(t * TAU * 1.4)); p.mouthO = "grin"; return p; },
+    pushups(t) { const p = base(), th = 1.13 + 0.11 * (0.5 + 0.5 * sin(t * 4)); p.root = [th, 0, 0]; p.armL = [-th, 0, 0.08]; p.armR = [-th, 0, -0.08]; p.legL = [0, 0, 0.04]; p.legR = [0, 0, -0.04]; p.head = [-0.65, 0, 0]; p.fixW = 1; p.fixL = cos(th); p.fixY = 0.2; p.mouthO = "flat"; p.browO = "angry"; return p; },
+    spin(t) { const p = base(); p.root = [0, t * 7, 0]; p.armL = [0, 0, 1.4]; p.armR = [0, 0, -1.4]; p.head = [-0.12, 0, 0]; p.lift = 0.1 * abs(sin(t * 3.5)); p.mouthO = "big"; p.eyeO = t > 3 ? "dizzy" : "happy"; return p; },
+    stretch(t) { const p = base(), s = sin(t * 0.9); p.armL = [-0.15, 0, 2.95]; p.armR = [-0.15, 0, -2.95]; p.root = [0, 0, 0.14 * s]; p.torso = [-0.08, 0, 0.1 * s]; p.head = [-0.2, 0, 0.1 * s]; p.mouthO = "o"; p.eyeO = "closed"; return p; },
+    sit(t) { const p = base(), b = sin(t * 1.6); p.legL = [-1.5, 0, 0.06]; p.legR = [-1.5, 0, -0.06]; p.armL = [-0.35, 0, 0.15]; p.armR = [-0.35, 0, -0.15]; p.torso = [-0.06 + 0.015 * b, 0, 0]; p.head = [0.04, 0.3 * sin(t * 0.4), 0]; return p; },
+    sleep(t) { const p = base(), b = sin(t * 1.4); p.root = [-1.52, 0, 0]; p.armL = [0, 0, 0.1]; p.armR = [0, 0, -0.1]; p.head = [-0.05, 0, 0.1]; p.torso = [0.01 * b, 0, 0]; p.fixW = 1; p.fixY = 0.55; p.eyeO = "closed"; p.mouthO = "o"; p.fx = "zzz"; return p; },
+    meditate(t) { const p = base(); p.legL = [-1.45, -0.6, 0]; p.legR = [-1.45, 0.6, 0]; p.armL = [-0.6, 0, 0.5]; p.armR = [-0.6, 0, -0.5]; p.fixW = 1; p.fixY = 1.0 + 0.25 * sin(t * 1.5); p.eyeO = "closed"; p.mouthO = "smile"; p.fx = "sparkle"; return p; },
+    zombie(t) { const p = base(), s = sin(t * 2.2); p.armL = [-1.5 + 0.08 * s, 0, 0.08]; p.armR = [-1.5 - 0.08 * s, 0, -0.08]; p.legL = [-0.25 * s, 0, 0]; p.legR = [0.25 * s, 0, 0]; p.torso = [0.12, 0.1 * s, 0.05 * s]; p.head = [0.18, 0.15 * s, 0.35]; p.root = [0, 0, 0.04 * s]; p.eyeO = "sleepy"; p.mouthO = "flat"; return p; },
+  };
+  function blend(list) {
+    const out = base(); LIMBS.forEach(k => (out[k] = [0, 0, 0]));
+    let sum = 0, best = null, bw = -1;
+    for (const { pose, w } of list) {
+      sum += w;
+      for (const k of ["lift", "sway", "fixW", "fixY", "fixL"]) out[k] += (pose[k] || 0) * w;
+      for (const k of LIMBS) for (let i = 0; i < 3; i++) out[k][i] += pose[k][i] * w;
+      if (w > bw) { bw = w; best = pose; }
+    }
+    sum = sum || 1;
+    for (const k of ["lift", "sway", "fixW", "fixY", "fixL"]) out[k] /= sum;
+    for (const k of LIMBS) for (let i = 0; i < 3; i++) out[k][i] /= sum;
+    if (best) { out.eyeO = best.eyeO || null; out.mouthO = best.mouthO || null; out.browO = best.browO || null; out.fx = best.fx || null; }
+    return out;
+  }
+
+  /* ================= avatar state ================= */
+  const st = { yaw: 0.35, y: 0, vy: 0, clock: 0, phase: 0, speed: 0, motion: "idle", emote: null, layers: new Map([["idle", { w: 1, t0: 0 }]]), active: "idle", blinkAt: 2, blinkUntil: 0, landAt: 0, spin: true };
+  function animate(dt, D) {
+    st.clock += dt;
+    if (st.clock > st.blinkAt) { st.blinkUntil = st.clock + 0.12; st.blinkAt = st.clock + 2.4 + Math.random() * 3; }
+    const target = st.emote ? 0 : st.motion === "walk" ? 8 : st.motion === "run" ? 16 : 0;
+    st.speed = lerp(st.speed, target, 1 - Math.exp(-dt * 8));
+    st.phase += st.speed * dt * lerp(1.39, 0.9, clamp((st.speed - 8) / 8, 0, 1)) * (2 / D.lh);
+    if (st.motion === "jump" && !st.emote && st.y <= 0 && st.clock > st.landAt + 0.45) st.vy = 15;
+    if (st.y > 0 || st.vy > 0) { st.vy -= 42 * dt; st.y += st.vy * dt; if (st.y <= 0) { st.y = 0; st.vy = 0; st.landAt = st.clock; } }
+    let a = st.y > 0 ? "jump" : st.emote ? st.emote : st.speed > 11 ? "run" : st.speed > 0.5 ? "walk" : "idle";
+    if (a !== st.active) { st.active = a; const L = st.layers.get(a); if (!L) st.layers.set(a, { w: 0, t0: st.clock }); else if (L.w < 0.05) L.t0 = st.clock; }
+    for (const [n, L] of st.layers) { L.w = clamp(L.w + (n === st.active ? 1 : -1) * dt / 0.2, 0, 1); if (L.w === 0 && n !== st.active) st.layers.delete(n); }
+    const c = { phase: st.phase, vy: st.vy }, list = [];
+    for (const [n, L] of st.layers) if (L.w > 0) list.push({ pose: A[n](st.clock - L.t0, c), w: L.w });
+    return blend(list);
+  }
+
+  /* ================= rig: build every box ================= */
+  const footDepth = (e, D) => { const a = Math.hypot(e[0], e[2]); return D.lh * cos(a) + (D.lw / 2) * abs(sin(a)); };
+  const hidesHair = h => !["none", "headphones", "bandana", "catears", "bunny", "horns", "halo", "antenna"].includes(h);
+
+  function buildRig(pose, D) {
+    const parts = [], extras = [];
+    const box = (j, c, s, col, o = {}) => parts.push(Object.assign({ j, c, s, col, bias: 0 }, o));
+    const yawM = rotY(st.yaw), sw = mv(yawM, [pose.sway, 0, 0]);
+    const planted = Math.max(footDepth(pose.legL, D), footDepth(pose.legR, D)) + pose.lift;
+    const rootY = lerp(planted, pose.fixY + pose.fixL * D.lh, clamp(pose.fixW, 0, 1)) + st.y;
+    const root = { m: mul(yawM, euler(pose.root)), t: [sw[0], rootY, sw[2]] };
+    const torso = child(root, [0, 0, 0], euler(pose.torso));
+    const neck = child(torso, [0, D.th, 0], euler(pose.head));
+    const shY = D.th - D.aw * 0.5, shX = D.tw / 2 + D.aw / 2;
+    const shL = child(torso, [shX, shY, 0], euler(pose.armL)), shR = child(torso, [-shX, shY, 0], euler(pose.armR));
+    const hx = D.tw / 2 - D.lw / 2;
+    const hipL = child(root, [hx, 0, 0], euler(pose.legL)), hipR = child(root, [-hx, 0, 0], euler(pose.legR));
+    const t = st.clock, w = D.hw, h = D.hh, d = D.hd;
+
+    // torso & head
+    const torsoCol = look.top === "overalls" ? C.topCol2 : C.topCol;
+    box(torso, [0, D.th / 2, 0], [D.tw, D.th, D.td], torsoCol, { kind: "torso", deco: drawTorso });
+    box(neck, [0, h / 2, 0], [w, h, d], C.skin, { kind: "head", bias: 0.02, deco: drawFace });
+
+    // arms: sleeve segment + skin (or glove) segment
+    const sleeve = { tee: 0.42, polo: 0.42, jersey: 0.4, tank: 0, dress: 0.22, overalls: 0.42 }[look.top] ?? 0.84;
+    const armTop = D.aw * 0.5;
+    for (const [j, side] of [[shL, 1], [shR, -1]]) {
+      const seg = (v0, v1, col, o = {}) => box(j, [0, armTop - (v0 + v1) / 2 * D.ah, 0], [D.aw + (o.inf || 0), (v1 - v0) * D.ah, D.aw + (o.inf || 0)], col, Object.assign({ kind: "arm", side }, o));
+      const hand = look.top === "spacesuit" ? C.topCol2 : C.skin;
+      if (sleeve > 0) seg(0, sleeve, C.topCol, { deco: look.top === "jersey" ? (P) => P.side && P.quad(0, 1, 0.88, 1, C.topCol2) : null });
+      seg(sleeve, 1, sleeve >= 0.84 ? hand : C.skin);
+      if (look.acc.includes("wristbands")) seg(0.68, 0.78, C.accCol, { inf: 0.1, bias: 0.03 });
+    }
+    // legs: trousers + skin + shoe
+    const shoeH = { sneakers: 0.15, hightops: 0.27, boots: 0.36, sandals: 0.06, slippers: 0.12, barefoot: 0 }[look.shoes];
+    const skirtish = look.top === "dress" || look.top === "robe" || look.bottom === "skirt";
+    const pantEnd = skirtish ? 0 : look.bottom === "shorts" ? 0.45 : 1 - shoeH;
+    for (const [j, side] of [[hipL, 1], [hipR, -1]]) {
+      const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side }, o)); };
+      const pants = look.top === "spacesuit" && look.bottom === "pants" ? C.topCol : C.botCol;
+      seg(0, pantEnd, pants, { deco: drawPants });
+      seg(pantEnd, 1 - shoeH, look.shoes === "barefoot" && pantEnd >= 1 ? C.skin : C.skin);
+      if (shoeH > 0) {
+        if (look.shoes === "sandals") seg(1 - shoeH, 1, C.soleCol, { deco: P => P.side && P.quad(0, 1, -2.5, -1.2, C.shoeCol) });
+        else if (look.shoes === "slippers") box(j, [0, -D.lh + 0.13, 0.12], [D.lw + 0.18, 0.28, D.lw + 0.34], C.shoeCol, { kind: "leg", side, bias: 0.02, deco: P => P.face === "front" && (P.ell(0.3, 0.45, 0.08, 0.14, INK), P.ell(0.7, 0.45, 0.08, 0.14, INK)) });
+        else {
+          seg(1 - shoeH, 1 - 0.05, C.shoeCol, { deco: drawShoe });
+          seg(1 - 0.05, 1, C.soleCol);
+        }
+      }
+    }
+
+    // skirts and long tops
+    if (skirtish) {
+      const long = look.top === "robe", len = long ? D.lh - 0.25 : look.top === "dress" ? D.lh * 0.6 : D.lh * 0.48;
+      const col = look.bottom === "skirt" && look.top !== "dress" && look.top !== "robe" ? C.botCol : C.topCol;
+      box(root, [0, -len / 2 + 0.12, 0], [D.tw + 0.35, len, D.td + 0.45], col, { kind: "skirt", bias: 0.04, deco: drawSkirt });
+    }
+    if (look.top === "hoodie") box(torso, [0, D.th - 0.2, -(D.td / 2 + 0.14)], [D.tw * 0.7, 0.55, 0.28], mix(C.topCol, [0, 0, 0], 0.12), { bias: 0.02 });
+    if (look.top === "spacesuit") box(torso, [0, D.th - 0.05, 0], [D.tw * 0.66, 0.2, D.td + 0.12], C.topCol2, { bias: 0.03 });
+
+    // hair
+    const hairCap = hidesHair(look.hat);
+    const H = (c, s, o = {}) => { if (o.top && hairCap) return; box(o.j || neck, c, s, o.col || C.hairCol, { kind: "hair", bias: 0.05 }); };
+    const top = () => H([0, h + 0.06, 0], [w + 0.12, 0.26, d + 0.12], { top: true });
+    const back = (L) => H([0, h - L / 2 + 0.1, -(d / 2 + 0.05)], [w + 0.12, L + 0.2, 0.14]);
+    const sides = (L, th = 0.12, dd = d * 0.8) => { for (const sx of [1, -1]) H([sx * (w / 2 + th / 2 - 0.01), h - L / 2 + 0.1, -d * 0.1], [th, L + 0.2, dd]); };
+    const fringe = (th = 0.26) => H([0, h - th / 2 + 0.03, d / 2 + 0.05], [w + 0.12, th, 0.1], { top: true });
+    const rotH = (pivot, rot, c, s, col, isTop) => { if (isTop && hairCap) return; box(child(neck, pivot, euler(rot)), c, s, col || C.hairCol, { kind: "hair", bias: 0.05 }); };
+    switch (look.hair) {
+      case "buzz": H([0, h + 0.02, 0], [w + 0.06, 0.1, d + 0.06], { top: true }); back(h * 0.45); break;
+      case "short": top(); back(h * 0.55); sides(h * 0.32); fringe(0.16); break;
+      case "fringe": top(); back(h * 0.7); sides(h * 0.6); fringe(0.38); break;
+      case "spiky": top(); back(h * 0.5); sides(h * 0.3);
+        [[-0.3, -0.25, -0.35, 0.4], [0.3, -0.25, -0.35, -0.4], [0, -0.3, -0.5, 0], [-0.32, 0.2, 0.2, 0.45], [0.32, 0.2, 0.2, -0.45], [0, 0.25, 0.35, 0]].forEach(([x, z, rx, rz]) => {
+          rotH([x * w, h + 0.12, z * d], [rx, 0, rz], [0, 0.22, 0], [0.3, 0.5, 0.3], null, true);
+          rotH([x * w, h + 0.12, z * d], [rx, 0, rz], [0, 0.52, 0], [0.18, 0.14, 0.18], C.hairCol2, true);
+        }); break;
+      case "slick": top(); back(h * 0.55); sides(h * 0.3); rotH([0, h + 0.05, d * 0.25], [-0.55, 0, 0], [0, 0.16, 0], [w + 0.08, 0.34, 0.5], null, true); break;
+      case "curly": back(h * 0.6); sides(h * 0.35);
+        for (const [x, z, y] of [[-0.32, -0.3, 0.05], [0.32, -0.3, 0.1], [0, -0.32, 0.12], [-0.34, 0.12, 0.08], [0.34, 0.12, 0.04], [0, 0.18, 0.14], [-0.12, -0.05, 0.22], [0.15, 0.0, 0.2]]) H([x * w, h + y, z * d], [0.5, 0.45, 0.5], { top: true });
+        break;
+      case "afro": H([0, h + 0.2, -0.04], [w + 0.7, 0.78, d + 0.7], { top: true }); back(h * 0.75); sides(h * 0.4, 0.2); break;
+      case "bob": top(); fringe(0.34); back(h * 0.88); sides(h * 0.82, 0.18, d + 0.1); break;
+      case "long": top(); fringe(0.2); H([0, h - (h + 0.9) / 2 + 0.1, -(d / 2 + 0.07)], [w + 0.14, h + 1.1, 0.2]); sides(h * 0.95, 0.14); break;
+      case "ponytail": top(); back(h * 0.6); sides(h * 0.4); fringe(0.16);
+        rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35 + 0.08 * sin(t * 3), 0, 0.05 * sin(t * 2)], [0, -0.55, -0.1], [0.42, 1.2, 0.42]);
+        rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35, 0, 0], [0, -0.02, -0.08], [0.48, 0.16, 0.48], C.hairCol2); break;
+      case "bun": top(); back(h * 0.55); sides(h * 0.35); fringe(0.14); H([0, h + 0.38, -0.12], [0.6, 0.5, 0.6], { top: true }); break;
+      case "pigtails": top(); fringe(0.22); back(h * 0.6);
+        for (const sx of [1, -1]) {
+          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * (0.3 + 0.05 * sin(t * 3 + sx))], [0, -0.5, 0], [0.36, 1.0, 0.36]);
+          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * 0.3], [0, -0.02, 0], [0.42, 0.14, 0.42], C.hairCol2);
+        } break;
+      case "mohawk": H([0, h + 0.02, 0], [w * 0.5, 0.08, d + 0.04], { top: true }); back(h * 0.4);
+        H([0, h + 0.22, 0], [0.32, 0.42, d + 0.14], { top: true }); H([0, h + 0.5, 0], [0.26, 0.16, d + 0.06], { top: true, col: C.hairCol2 }); break;
+      case "braids": top(); fringe(0.18); back(h * 0.7);
+        for (const sx of [1, -1]) for (let i = 0; i < 4; i++) H([sx * (w / 2 + 0.1), h * 0.35 - i * 0.34, D.td / 2 - d / 2 + 0.2], [0.28, 0.32, 0.28], { col: i % 2 ? C.hairCol2 : C.hairCol, j: neck });
+        break;
+    }
+
+    // facial hair boxes
+    if (look.facial === "beard") box(neck, [0, h * 0.16, d / 2 + 0.06], [w * 0.86, h * 0.32, 0.16], C.hairCol, { kind: "hair", bias: 0.05 });
+    if (look.facial === "fullbeard") {
+      box(neck, [0, h * 0.14, d / 2 + 0.07], [w + 0.06, h * 0.34, 0.18], C.hairCol, { kind: "hair", bias: 0.05 });
+      for (const sx of [1, -1]) box(neck, [sx * (w / 2 + 0.05), h * 0.25, 0.05], [0.12, h * 0.5, d * 0.75], C.hairCol, { kind: "hair", bias: 0.05 });
+      box(neck, [0, -0.1, d / 2 + 0.02], [w * 0.7, 0.25, 0.22], C.hairCol, { kind: "hair", bias: 0.05 });
+    }
+    if (look.glasses === "goggles") box(neck, [0, h * 0.58, 0], [w + 0.1, h * 0.27, d + 0.1], C.glassCol, { kind: "goggles", bias: 0.07, deco: P => P.face === "front" && [0.3, 0.7].forEach(u => { P.ell(u, 0.5, 0.17, 0.36, [120, 200, 240]); P.ell(u - 0.04, 0.38, 0.05, 0.1, WHITE, 1, 0.7); }) });
+
+    // headwear
+    const hy = hairCap || ["none", "buzz"].includes(look.hair) ? h : h + 0.16;
+    const HT = (c, s, col, o = {}) => box(o.j || neck, c, s, col || C.hatCol, Object.assign({ kind: "hat", bias: 0.08 }, o));
+    const rotHat = (pivot, rot, c, s, col, o) => HT(c, s, col, Object.assign({ j: child(neck, pivot, euler(rot)) }, o));
+    switch (look.hat) {
+      case "cap": HT([0, h + 0.16, -0.02], [w + 0.16, 0.36, d + 0.16], null, { deco: P => P.face === "front" && P.ell(0.5, 0.5, 0.13, 0.28, C.hatCol2) }); HT([0, h + 0.02, d / 2 + 0.33], [w - 0.06, 0.08, 0.68]); break;
+      case "backcap": HT([0, h + 0.16, 0.02], [w + 0.16, 0.36, d + 0.16]); HT([0, h + 0.02, -(d / 2 + 0.33)], [w - 0.06, 0.08, 0.68]); break;
+      case "beanie": HT([0, h + 0.12, 0], [w + 0.18, 0.64, d + 0.18]); HT([0, h - 0.14, 0], [w + 0.24, 0.2, d + 0.24], C.hatCol2); HT([0, h + 0.56, 0], [0.36, 0.36, 0.36], C.hatCol2); break;
+      case "tophat": HT([0, h + 0.05, 0], [w + 0.7, 0.1, d + 0.7]); HT([0, h + 0.64, 0], [w - 0.04, 1.08, d - 0.04]); HT([0, h + 0.26, 0], [w + 0.01, 0.22, d + 0.01], C.hatCol2); break;
+      case "cowboy": HT([0, h + 0.08, 0], [w + 1.25, 0.1, d + 1.0]); for (const sx of [1, -1]) HT([sx * (w / 2 + 0.6), h + 0.2, 0], [0.12, 0.24, d + 1.0]);
+        HT([0, h + 0.44, 0], [w + 0.06, 0.64, d - 0.04]); HT([0, h + 0.2, 0], [w + 0.1, 0.16, d], C.hatCol2); break;
+      case "crown": HT([0, h + 0.14, 0], [w + 0.1, 0.32, d + 0.1], null, { deco: P => P.side && P.poly([[0.5, 0.15], [0.62, 0.5], [0.5, 0.85], [0.38, 0.5]], C.hatCol2) });
+        for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 1], [0, -1], [1, 0], [-1, 0]]) HT([x * (w / 2 - 0.05), h + 0.42, z * (d / 2 - 0.05)], [0.2, 0.28, 0.2]); break;
+      case "wizard": HT([0, h + 0.05, 0], [w + 0.85, 0.08, d + 0.85]);
+        [1, 0.76, 0.54, 0.34, 0.16].forEach((s, i) => HT([0, h + 0.28 + i * 0.36, -0.07 * i * i], [w * s + 0.05, 0.38, d * s + 0.05], null, i === 0 ? { deco: P => P.face === "front" && P.poly(starPts(0.5, 0.5, 0.28, 0.45), C.hatCol2) } : {}));
+        break;
+      case "chef": HT([0, h + 0.1, 0], [w + 0.08, 0.34, d + 0.08]); HT([0, h + 0.56, 0], [w + 0.45, 0.62, d + 0.45]); break;
+      case "party": { const pj = child(neck, [0, h, 0], rotZ(0.15)); [0.92, 0.68, 0.45, 0.24].forEach((s, i) => HT([0, 0.17 + i * 0.32, 0], [w * s, 0.33, d * s], i % 2 ? C.hatCol2 : C.hatCol, { j: pj })); HT([0, 1.45, 0], [0.3, 0.3, 0.3], C.hatCol2, { j: pj }); break; }
+      case "headphones": HT([0, hy + 0.06, 0], [w + 0.28, 0.14, 0.3]); for (const sx of [1, -1]) { HT([sx * (w / 2 + 0.13), h * 0.55, 0], [0.26, 0.6, 0.62], C.hatCol2); HT([sx * (w / 2 + 0.1), h * 0.95, 0], [0.1, h * 0.5, 0.18]); } break;
+      case "bandana": HT([0, h * 0.87, 0], [w + 0.1, 0.24, d + 0.1], null, { deco: P => P.side && [0.2, 0.5, 0.8].forEach(u => P.ell(u, 0.5, 0.05, 0.18, C.hatCol2)) });
+        HT([0, h * 0.87, -(d / 2 + 0.14)], [0.3, 0.3, 0.2]); rotHat([0.05, h * 0.82, -(d / 2 + 0.2)], [0.5, 0, 0.3], [0, -0.3, 0], [0.18, 0.6, 0.08]); break;
+      case "helmet": box(neck, [0, h / 2 + 0.06, 0.02], [w + 0.36, h + 0.42, d + 0.36], [200, 230, 255], { kind: "glass", bias: 0.3, alpha: 0.26 });
+        HT([0, -0.04, 0.02], [w + 0.44, 0.16, d + 0.44], [230, 232, 238]); break;
+      case "catears": for (const sx of [1, -1]) rotHat([sx * w * 0.3, hy - 0.02, 0], [0, 0, sx * -0.15], [0, 0.18, 0], [0.36, 0.38, 0.14], null, { deco: P => P.face === "front" && P.poly([[0.5, 0.2], [0.8, 0.95], [0.2, 0.95]], [255, 150, 170]) }); break;
+      case "bunny": for (const sx of [1, -1]) rotHat([sx * w * 0.22, hy - 0.02, 0], [-0.1, 0, sx * -(0.12 + 0.05 * sin(t * 2 + sx))], [0, 0.45, 0], [0.24, 0.9, 0.12], null, { deco: P => P.face === "front" && P.quad(0.3, 0.7, 0.1, 0.9, [255, 170, 190]) }); break;
+      case "horns": for (const sx of [1, -1]) { rotHat([sx * w * 0.3, hy - 0.04, 0.12], [0, 0, sx * -0.4], [0, 0.2, 0], [0.22, 0.42, 0.22]); rotHat([sx * w * 0.3, hy - 0.04, 0.12], [0, 0, sx * -0.4], [0, 0.48, 0], [0.12, 0.16, 0.12], C.hatCol2); } break;
+      case "halo": { const yy = h + 0.5 + 0.06 * sin(t * 2), r = Math.max(w, d) * 0.42; for (const s of [1, -1]) { HT([0, yy, s * r], [r * 2 + 0.1, 0.08, 0.1]); HT([s * r, yy, 0], [0.1, 0.08, r * 2 + 0.1]); } break; }
+      case "antenna": { const aj = child(neck, [0, hy, 0], rotZ(0.12 * sin(t * 3))); HT([0, 0.35, 0], [0.08, 0.7, 0.08], [80, 84, 96], { j: aj }); HT([0, 0.78, 0], [0.26, 0.26, 0.26], C.hatCol2, { j: aj }); break; }
+      case "viking": HT([0, h + 0.12, 0], [w + 0.16, 0.5, d + 0.16]); HT([0, h - 0.08, 0], [w + 0.22, 0.14, d + 0.22], C.hatCol2);
+        for (const sx of [1, -1]) { rotHat([sx * (w / 2 + 0.06), h + 0.18, 0], [0, 0, sx * -1.0], [0, 0.3, 0], [0.22, 0.6, 0.22], [238, 230, 210]); rotHat([sx * (w / 2 + 0.06), h + 0.18, 0], [0, 0, sx * -0.75], [0, 0.66, 0], [0.13, 0.22, 0.13], [238, 230, 210]); }
+        break;
+    }
+
+    // accessories
+    const has = k => look.acc.includes(k);
+    const speedK = clamp(st.speed / 16 + (st.y > 0 ? 0.4 : 0), 0, 1);
+    if (has("backpack")) { box(torso, [0, D.th * 0.5, -(D.td / 2 + 0.3)], [D.tw * 0.72, D.th * 0.75, 0.6], C.accCol, { bias: 0.01, deco: P => P.face === "back" && P.quad(0.15, 0.85, 0.5, 0.9, C.accCol, 0.8) }); }
+    if (has("jetpack")) {
+      for (const sx of [1, -1]) box(torso, [sx * D.tw * 0.2, D.th * 0.5, -(D.td / 2 + 0.3)], [D.tw * 0.32, D.th * 0.8, 0.55], C.accCol, { bias: 0.01, deco: P => P.face === "back" && P.quad(0.2, 0.8, 0.1, 0.25, [226, 85, 74]) });
+      if (st.y > 0 || st.active === "meditate") for (const sx of [1, -1]) extras.push({ kind: "flame", j: torso, at: [sx * D.tw * 0.2, D.th * 0.1, -(D.td / 2 + 0.3)] });
+    }
+    if (has("guitar")) { const gj = child(torso, [0, D.th * 0.45, -(D.td / 2 + 0.2)], rotZ(0.6)); box(gj, [0, -0.35, 0], [1.15, 1.05, 0.3], C.accCol, { deco: P => P.face === "back" && P.ell(0.5, 0.45, 0.16, 0.16, INK) }); box(gj, [0, 0.85, 0], [0.24, 1.5, 0.16], [120, 80, 52]); box(gj, [0, 1.65, 0], [0.34, 0.3, 0.18], [60, 40, 30]); }
+    if (has("cape")) { const ang = 0.08 + 0.55 * speedK + 0.05 * sin(t * (3 + 6 * speedK)); const cj = child(torso, [0, D.th - 0.05, -(D.td / 2 + 0.06)], rotX(ang)); const L = D.th + D.lh * 0.7; box(cj, [0, -L / 2, -0.04], [D.tw + 0.15, L, 0.08], C.accCol, { bias: 0.0 }); }
+    if (has("wings")) { const flap = 0.25 + 0.25 * sin(t * (st.y > 0 || st.emote ? 10 : 2)); for (const sx of [1, -1]) { const wj = child(torso, [sx * 0.35, D.th * 0.7, -(D.td / 2 + 0.08)], euler([0, sx * (0.55 + flap), 0])); box(wj, [sx * 0.95, 0.15, 0], [1.9, 1.3, 0.08], C.accCol); box(wj, [sx * 1.25, -0.6, 0], [1.1, 0.5, 0.08], mix(C.accCol, [0, 0, 0], 0.08)); } }
+    if (has("tail")) { const tj = child(root, [0, 0.1, -(D.td / 2)], euler([0.55 + 0.1 * sin(t * 2), 0.45 * sin(t * 5), 0])); box(tj, [0, 0, -0.65], [0.24, 0.24, 1.3], C.accCol); box(tj, [0, 0, -1.4], [0.3, 0.3, 0.3], mix(C.accCol, WHITE, 0.3)); }
+    if (has("scarf")) { box(torso, [0, D.th - 0.12, 0], [D.tw * 0.62, 0.38, D.td + 0.14], C.accCol, { bias: 0.03, deco: P => P.side && P.quad(0, 1, 0.4, 0.6, WHITE, 0.95, 0.5) }); box(torso, [-D.tw * 0.18, D.th - 0.7, D.td / 2 + 0.11], [0.36, 1.0, 0.1], C.accCol, { bias: 0.03, deco: P => P.face === "front" && [0.25, 0.55].forEach(v => P.quad(0, 1, v, v + 0.1, WHITE, 0.95, 0.5)) }); }
+    if (has("earrings")) for (const sx of [1, -1]) box(neck, [sx * (w / 2 + 0.05), h * 0.32, 0.05], [0.08, 0.18, 0.08], GOLD, { bias: 0.06 });
+    if (has("satchel")) box(root, [-(D.tw / 2 + 0.17), 0.2, 0.1], [0.3, 0.75, 0.95], C.accCol, { bias: 0.02, deco: P => P.side && P.quad(0, 1, 0, 0.35, C.accCol, 0.85) });
+    if (has("balloon")) {
+      const hand = add(shR.t, mv(shR.m, [0, -(D.ah - D.aw * 0.5), 0]));
+      const bp = add(hand, [0.6 + 0.15 * sin(t * 1.3), 3.2 + 0.15 * sin(t * 1.7), 0.3]);
+      box({ m: rotY(0.4 * sin(t * 0.7)), t: bp }, [0, 0.55, 0], [0.95, 1.1, 0.95], C.accCol, { deco: P => P.side && P.ell(0.3, 0.3, 0.08, 0.12, WHITE, 1, 0.6) });
+      box({ m: I3, t: bp }, [0, -0.05, 0], [0.16, 0.12, 0.16], C.accCol);
+      extras.push({ kind: "line", a: hand, b: add(bp, [0, -0.1, 0]) });
+    }
+    return { parts, extras, root, torso, neck, shL, shR, hipL, hipR };
+  }
+
+  /* ================= face & clothing decoration ================= */
+  function starPts(cu, cv, ru, rv, n = 5) { const p = []; for (let i = 0; i < n * 2; i++) { const a = -Math.PI / 2 + (i * Math.PI) / n, r = i % 2 ? 0.45 : 1; p.push([cu + Math.cos(a) * ru * r, cv + Math.sin(a) * rv * r]); } return p; }
+  function heartPts(cu, cv, ru, rv) { const p = []; for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU, x = 16 * Math.pow(sin(a), 3), y = 13 * cos(a) - 5 * cos(2 * a) - 2 * cos(3 * a) - cos(4 * a); p.push([cu + (x / 17) * ru, cv - (y / 17) * rv]); } return p; }
+  const boltPts = (cu, cv, s, sv) => [[0.1, -1], [-0.45, 0.1], [-0.05, 0.1], [-0.2, 1], [0.45, -0.15], [0.05, -0.15], [0.3, -1]].map(([x, y]) => [cu + x * s, cv + y * sv]);
+  const SEG = { 0: "abcdef", 1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc", 5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcfgd" };
+  function digit(P, n, x, y, w, h, col) {
+    const t = w * 0.22, tv = h * 0.11, s = SEG[n] || "";
+    const R = { a: [x, x + w, y, y + tv], b: [x + w - t, x + w, y, y + h / 2], c: [x + w - t, x + w, y + h / 2, y + h], d: [x, x + w, y + h - tv, y + h], e: [x, x + t, y + h / 2, y + h], f: [x, x + t, y, y + h / 2], g: [x, x + w, y + h / 2 - tv / 2, y + h / 2 + tv / 2] };
+    for (const k of s) P.quad(R[k][0], R[k][1], R[k][2], R[k][3], col);
+  }
+
+  function drawFace(P, pose) {
+    if (P.face !== "front" || P.size < 5) return;
+    const blink = st.clock < st.blinkUntil;
+    let eyes = pose.eyeO || look.eyes;
+    const mouth = pose.mouthO || look.mouth, brows = pose.browO || look.brows, fx = look.fx;
+    const skinDark = mix(C.skin, [60, 30, 20], 0.35);
+    if (fx.includes("blush")) { P.ell(0.18, 0.62, 0.09, 0.055, [255, 110, 120], 1, 0.38); P.ell(0.82, 0.62, 0.09, 0.055, [255, 110, 120], 1, 0.38); }
+    if (fx.includes("freckles")) for (const [u, v] of [[0.16, 0.56], [0.22, 0.6], [0.19, 0.65], [0.84, 0.56], [0.78, 0.6], [0.81, 0.65]]) P.ell(u, v, 0.012, 0.012, skinDark, 1, 0.9, 8);
+    if (fx.includes("paint")) for (const u of [0.13, 0.87]) for (const dv of [0, 0.06]) P.quad(u - 0.06, u + 0.06, 0.56 + dv, 0.585 + dv, C.accCol);
+    if (fx.includes("mole")) P.ell(0.7, 0.74, 0.014, 0.014, INK, 1, 1, 8);
+    // eyes
+    const E = [0.34, 0.66], ev = 0.42, ec = C.eyeCol;
+    const arc = (cu, up, col = INK) => P.line([[cu - 0.07, ev + (up ? 0.02 : -0.02)], [cu, ev + (up ? -0.04 : 0.04)], [cu + 0.07, ev + (up ? 0.02 : -0.02)]], col, 0.045);
+    const openStyles = ["round", "dot", "big", "anime", "star", "heart", "angry"];
+    if (blink && openStyles.includes(eyes)) eyes = "closed";
+    for (let i = 0; i < 2; i++) {
+      const cu = E[i];
+      switch (eyes) {
+        case "dot": P.ell(cu, ev, 0.05, 0.06, INK); break;
+        case "round": P.ell(cu, ev, 0.07, 0.11, INK); if (P.size > 14) P.ell(cu + 0.02, ev - 0.04, 0.022, 0.03, WHITE); break;
+        case "big": P.ell(cu, ev, 0.1, 0.13, WHITE); P.ell(cu, ev + 0.01, 0.07, 0.1, ec); P.ell(cu, ev + 0.02, 0.035, 0.05, INK); P.ell(cu + 0.03, ev - 0.03, 0.022, 0.03, WHITE); break;
+        case "anime": P.ell(cu, ev, 0.08, 0.14, ec); P.quad(cu - 0.08, cu + 0.08, ev - 0.14, ev - 0.06, INK, 1, 0.55); P.ell(cu, ev + 0.03, 0.04, 0.07, INK, 1, 0.7); P.ell(cu + 0.03, ev - 0.05, 0.025, 0.035, WHITE); P.ell(cu - 0.03, ev + 0.07, 0.015, 0.02, WHITE); break;
+        case "happy": arc(cu, true); break;
+        case "closed": arc(cu, false); break;
+        case "sleepy": P.poly([[cu - 0.075, ev], [cu + 0.075, ev], [cu + 0.06, ev + 0.06], [cu, ev + 0.08], [cu - 0.06, ev + 0.06]], INK); P.line([[cu - 0.09, ev - 0.005], [cu + 0.09, ev - 0.005]], INK, 0.03); break;
+        case "wink": i === 0 ? (P.ell(cu, ev, 0.07, 0.11, INK), P.size > 14 && P.ell(cu + 0.02, ev - 0.04, 0.022, 0.03, WHITE)) : arc(cu, true); break;
+        case "star": P.poly(starPts(cu, ev, 0.1, 0.13), ec.every(x => x < 80) ? GOLD : ec); break;
+        case "heart": P.poly(heartPts(cu, ev, 0.1, 0.12), [235, 60, 90]); break;
+        case "angry": P.ell(cu, ev + 0.01, 0.07, 0.1, INK); P.poly(i === 0 ? [[cu - 0.1, ev - 0.14], [cu + 0.1, ev - 0.14], [cu + 0.1, ev - 0.02]] : [[cu - 0.1, ev - 0.14], [cu + 0.1, ev - 0.14], [cu - 0.1, ev - 0.02]], C.skin, P.k); break;
+        case "cool": P.line([[cu - 0.07, ev + 0.01], [cu + 0.07, ev + 0.01]], INK, 0.05); break;
+        case "dizzy": P.line([[cu - 0.06, ev - 0.07], [cu + 0.06, ev + 0.07]], INK, 0.04); P.line([[cu + 0.06, ev - 0.07], [cu - 0.06, ev + 0.07]], INK, 0.04); break;
+      }
+      if (fx.includes("lashes") && !["closed", "happy", "cool", "dizzy"].includes(eyes)) P.line([[cu + (i ? 0.06 : -0.06), ev - 0.08], [cu + (i ? 0.11 : -0.11), ev - 0.12]], INK, 0.025);
+    }
+    // brows
+    const bc = look.hair === "none" ? skinDark : C.hairCol;
+    for (let i = 0; i < 2; i++) {
+      const cu = E[i], o = i === 0 ? -1 : 1; // o: outward direction
+      switch (brows) {
+        case "normal": P.line([[cu - 0.06, 0.27], [cu + 0.06, 0.27]], bc, 0.035); break;
+        case "thick": P.quad(cu - 0.08, cu + 0.08, 0.24, 0.29, bc); break;
+        case "raised": P.line([[cu - 0.07, 0.25], [cu, 0.21], [cu + 0.07, 0.25]], bc, 0.035); break;
+        case "angry": P.line([[cu + o * 0.08, 0.24], [cu - o * 0.06, 0.3]], bc, 0.045); break;
+        case "worried": P.line([[cu + o * 0.08, 0.3], [cu - o * 0.06, 0.24]], bc, 0.04); break;
+      }
+    }
+    // mouth
+    const mc = C.lipCol, mv0 = 0.68;
+    const curve = (w0, d0, y = mv0) => { const pts = []; for (let i = 0; i <= 10; i++) { const x = -1 + i / 5; pts.push([0.5 + x * w0, y + d0 * (1 - x * x)]); } return pts; };
+    switch (mouth) {
+      case "smile": P.line(curve(0.13, 0.06, 0.66), mc, 0.05); break;
+      case "grin": P.poly(curve(0.15, 0.13, 0.63), mc); break;
+      case "big": P.poly(curve(0.2, 0.2, 0.62), mc); P.poly(curve(0.11, 0.07, 0.75), [235, 110, 130]); break;
+      case "teeth": P.poly(curve(0.17, 0.15, 0.63), mc); P.quad(0.36, 0.64, 0.63, 0.68, WHITE); break;
+      case "smirk": P.line([[0.38, 0.69], [0.5, 0.7], [0.6, 0.68], [0.65, 0.64]], mc, 0.045); break;
+      case "flat": P.line([[0.4, 0.7], [0.6, 0.7]], mc, 0.045); break;
+      case "o": P.ell(0.5, 0.71, 0.05, 0.065, mc); break;
+      case "tongue": P.line(curve(0.13, 0.06, 0.66), mc, 0.05); P.poly([[0.46, 0.715], [0.56, 0.715], [0.555, 0.79], [0.51, 0.81], [0.465, 0.79]], [235, 100, 120]); break;
+      case "cat": P.line([[0.38, 0.67], [0.44, 0.71], [0.5, 0.67], [0.56, 0.71], [0.62, 0.67]], mc, 0.04); break;
+      case "frown": P.line(curve(0.12, -0.05, 0.73), mc, 0.05); break;
+      case "fangs": P.line(curve(0.14, 0.05, 0.66), mc, 0.05); for (const u of [0.43, 0.57]) P.poly([[u - 0.025, 0.695], [u + 0.025, 0.695], [u, 0.76]], WHITE); break;
+      case "kiss": P.poly(heartPts(0.5, 0.7, 0.06, 0.05), [210, 60, 90]); break;
+    }
+    // facial hair drawn on the skin
+    if (look.facial === "stubble") for (let i = 0; i < 26; i++) { const u = 0.2 + ((i * 37) % 60) / 100, v = 0.74 + ((i * 53) % 22) / 100; P.ell(u, v, 0.008, 0.008, mix(C.hairCol, C.skin, 0.35), 1, 0.85, 6); }
+    if (look.facial === "mustache") P.poly([[0.32, 0.64], [0.42, 0.58], [0.5, 0.61], [0.58, 0.58], [0.68, 0.64], [0.6, 0.65], [0.5, 0.63], [0.4, 0.65]], C.hairCol);
+    if (look.facial === "goatee") { P.quad(0.43, 0.57, 0.8, 0.97, C.hairCol); P.poly([[0.35, 0.63], [0.5, 0.6], [0.65, 0.63], [0.5, 0.645]], C.hairCol); }
+    if (fx.includes("bandaid")) { P.poly([[0.72, 0.18], [0.86, 0.12], [0.89, 0.18], [0.75, 0.24]], [240, 200, 160]); P.ell(0.805, 0.18, 0.02, 0.025, [210, 160, 120]); }
+    // glasses
+    const gc = C.glassCol;
+    switch (look.glasses) {
+      case "round": for (const cu of E) P.ring(cu, ev, 0.13, 0.15, gc, 0.035); P.line([[0.47, ev - 0.02], [0.53, ev - 0.02]], gc, 0.035); break;
+      case "square": for (const cu of E) P.rect(cu - 0.13, cu + 0.13, ev - 0.12, ev + 0.12, gc, 0.035); P.line([[0.47, ev - 0.03], [0.53, ev - 0.03]], gc, 0.035); break;
+      case "nerd": for (const cu of E) P.rect(cu - 0.14, cu + 0.14, ev - 0.13, ev + 0.13, gc, 0.065); P.quad(0.46, 0.54, ev - 0.06, ev + 0.02, WHITE); break;
+      case "shades": for (const cu of E) { P.quad(cu - 0.14, cu + 0.14, ev - 0.1, ev + 0.11, gc); P.poly([[cu - 0.1, ev - 0.08], [cu - 0.03, ev - 0.08], [cu - 0.09, ev + 0.05]], WHITE, 1, 0.3); } P.quad(0.46, 0.54, ev - 0.08, ev - 0.04, gc); break;
+      case "heart": for (const cu of E) P.poly(heartPts(cu, ev, 0.14, 0.15), gc); P.quad(0.47, 0.53, ev - 0.05, ev - 0.02, gc); break;
+      case "star": for (const cu of E) P.poly(starPts(cu, ev, 0.15, 0.18), gc); break;
+      case "visor": P.quad(0.08, 0.92, ev - 0.11, ev + 0.1, gc, 1, 0.85); P.quad(0.1, 0.9, ev - 0.08, ev - 0.05, WHITE, 1, 0.35); break;
+      case "monocle": P.ring(E[1], ev, 0.14, 0.16, GOLD, 0.035); P.line([[E[1] + 0.12, ev + 0.08], [0.95, 0.75]], GOLD, 0.015); break;
+    }
+  }
+
+  function pattern(P, kind, col, emblemFaces = true) {
+    const front = P.face === "front" || P.face === "back";
+    switch (kind) {
+      case "stripes": for (let i = 0; i < 4; i++) P.quad(0, 1, 0.12 + i * 0.22, 0.22 + i * 0.22, col); break;
+      case "vstripes": for (let i = 0; i < 5; i++) P.quad(0.06 + i * 0.2, 0.1 + i * 0.2, 0, 1, col); break;
+      case "dots": for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) P.ell(0.14 + x * 0.24 + (y % 2) * 0.12, 0.12 + y * 0.24, 0.045, 0.045, col, 1, 1, 10); break;
+      case "checker": for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if ((x + y) % 2) P.quad(x / 4, (x + 1) / 4, y / 4, (y + 1) / 4, col); break;
+      case "camo": for (const [u, v, r] of [[0.2, 0.2, 0.16], [0.7, 0.3, 0.2], [0.35, 0.7, 0.18], [0.85, 0.8, 0.14], [0.55, 0.05, 0.1]]) P.ell(u, v, r, r * 0.7, col, 1, 0.9, 10); break;
+      case "twotone": P.quad(0, 1, 0.5, 1, col); break;
+      case "star": if (front && emblemFaces) P.poly(starPts(0.5, 0.42, 0.24, 0.28), col); break;
+      case "heart": if (front && emblemFaces) P.poly(heartPts(0.5, 0.42, 0.22, 0.24), col); break;
+      case "bolt": if (front && emblemFaces) P.poly(boltPts(0.5, 0.45, 0.36, 0.32), col); break;
+      case "smiley": if (front && emblemFaces) { P.ell(0.5, 0.42, 0.2, 0.22, col); P.ell(0.44, 0.37, 0.025, 0.04, INK); P.ell(0.56, 0.37, 0.025, 0.04, INK); P.line([[0.42, 0.48], [0.5, 0.53], [0.58, 0.48]], INK, 0.025); } break;
+    }
+  }
+
+  function drawTorso(P) {
+    if (!P.side) return;
+    const f = P.face, c2 = C.topCol2, front = f === "front", backF = f === "back";
+    const patterned = ["tee", "longsleeve", "tank", "hoodie", "sweater", "dress", "robe", "polo"].includes(look.top);
+    if (patterned) pattern(P, look.pattern, c2);
+    switch (look.top) {
+      case "tee": case "longsleeve": if (front) P.poly([[0.36, 0], [0.64, 0], [0.5, 0.1]], C.skin); break;
+      case "tank": if (front || backF) P.poly([[0.28, 0], [0.72, 0], [0.62, 0.2], [0.5, 0.24], [0.38, 0.2]], C.skin); break;
+      case "hoodie": if (front) { P.quad(0.22, 0.78, 0.6, 0.92, C.topCol, 0.86); for (const u of [0.42, 0.58]) P.line([[u, 0.04], [u - 0.01 * (u < 0.5 ? 1 : -1), 0.34]], mix(C.topCol, WHITE, 0.55), 0.02); } break;
+      case "jacket": if (front) { P.quad(0.4, 0.6, 0, 1, c2); pattern(P, look.pattern === "solid" ? "solid" : look.pattern, C.topCol, true); P.line([[0.5, 0.02], [0.5, 1]], mix(C.topCol, [0, 0, 0], 0.35), 0.015); P.poly([[0.3, 0], [0.4, 0], [0.4, 0.42]], C.topCol, 0.8); P.poly([[0.7, 0], [0.6, 0], [0.6, 0.42]], C.topCol, 0.8); P.quad(0.1, 0.3, 0.65, 0.7, C.topCol, 0.75); P.quad(0.7, 0.9, 0.65, 0.7, C.topCol, 0.75); } break;
+      case "suit": if (front) { P.poly([[0.32, 0], [0.68, 0], [0.5, 0.55]], WHITE); P.poly([[0.46, 0.04], [0.54, 0.04], [0.57, 0.42], [0.5, 0.52], [0.43, 0.42]], c2); P.poly([[0.32, 0], [0.42, 0], [0.5, 0.55], [0.38, 0.3]], C.topCol, 0.8); P.poly([[0.68, 0], [0.58, 0], [0.5, 0.55], [0.62, 0.3]], C.topCol, 0.8); for (const v of [0.65, 0.8]) P.ell(0.5, v, 0.025, 0.025, INK, 1, 1, 8); P.quad(0.66, 0.84, 0.3, 0.34, WHITE, 0.9); } break;
+      case "sweater": P.quad(0, 1, 0.88, 1, C.topCol, 0.8); if (front || backF) P.quad(0.3, 0.7, 0, 0.08, C.topCol, 0.8); break;
+      case "polo": if (front) { P.poly([[0.3, 0], [0.5, 0], [0.38, 0.14]], c2); P.poly([[0.7, 0], [0.5, 0], [0.62, 0.14]], c2); P.line([[0.5, 0.02], [0.5, 0.3]], mix(C.topCol, [0, 0, 0], 0.3), 0.015); for (const v of [0.12, 0.24]) P.ell(0.5, v, 0.02, 0.02, WHITE, 1, 1, 8); } break;
+      case "jersey": { const n = String(look.number); const digits = n.length === 1 ? [n] : [n[0], n[1]]; const W0 = front ? 0.17 : 0.22, H0 = front ? 0.36 : 0.5, y0 = front ? 0.3 : 0.2; if (front || backF) { const tot = digits.length * W0 + (digits.length - 1) * 0.06; digits.forEach((dg, i) => digit(P, +dg, 0.5 - tot / 2 + i * (W0 + 0.06), y0, W0, H0, c2)); } else P.quad(0.42, 0.58, 0, 1, c2); if (front) P.poly([[0.36, 0], [0.64, 0], [0.5, 0.14]], c2); break; }
+      case "overalls": { const bc = C.botCol; P.quad(0, 1, 0.78, 1, bc); if (front) { P.quad(0.22, 0.78, 0.36, 1, bc); for (const u of [0.28, 0.72]) { P.quad(u - 0.06, u + 0.06, 0, 0.38, bc); P.ell(u, 0.38, 0.03, 0.03, GOLD, 1, 1, 8); } P.quad(0.38, 0.62, 0.5, 0.64, bc, 0.85); } if (backF) { P.poly([[0.2, 0], [0.32, 0], [0.8, 0.8], [0.68, 0.8]], bc); P.poly([[0.8, 0], [0.68, 0], [0.2, 0.8], [0.32, 0.8]], bc); } break; }
+      case "dress": if (front) P.poly([[0.32, 0], [0.68, 0], [0.5, 0.18]], C.skin); P.quad(0, 1, 0.88, 1, c2); break;
+      case "robe": if (front) { P.line([[0.3, 0], [0.62, 1]], mix(C.topCol, [0, 0, 0], 0.35), 0.02); P.poly([[0.34, 0], [0.66, 0], [0.5, 0.22]], C.skin); } P.quad(0, 1, 0.72, 0.82, c2); break;
+      case "spacesuit": if (front) { P.quad(0.28, 0.72, 0.28, 0.6, mix(C.topCol, [0, 0, 0], 0.15)); [[0.38, [226, 85, 74]], [0.5, [47, 125, 225]], [0.62, [242, 184, 34]]].forEach(([u, col]) => P.ell(u, 0.4, 0.035, 0.04, col, 1, 1, 10)); P.quad(0.32, 0.68, 0.5, 0.54, [60, 70, 90]); } P.quad(0, 1, 0.84, 0.92, c2); break;
+    }
+    const has = k => look.acc.includes(k);
+    if (has("necklace") && front) { P.line([[0.3, 0.02], [0.5, 0.32], [0.7, 0.02]], GOLD, 0.02); P.poly(starPts(0.5, 0.36, 0.05, 0.06), GOLD); }
+    if (has("bowtie") && front) { P.poly([[0.5, 0.08], [0.36, 0.02], [0.36, 0.16]], C.accCol); P.poly([[0.5, 0.08], [0.64, 0.02], [0.64, 0.16]], C.accCol); P.ell(0.5, 0.09, 0.03, 0.04, C.accCol, 0.8, 1, 8); }
+    if (has("belt")) { P.quad(0, 1, 0.9, 0.99, [50, 36, 28]); if (front) P.quad(0.44, 0.56, 0.885, 1, GOLD); }
+    if ((has("backpack") || has("jetpack")) && front) for (const u of [0.22, 0.78]) P.quad(u - 0.05, u + 0.05, 0, 0.75, mix(C.accCol, [0, 0, 0], 0.15));
+    if (has("satchel") && (front || backF)) P.poly(front ? [[0.82, 0], [0.94, 0], [0.18, 1], [0.06, 1]] : [[0.06, 0], [0.18, 0], [0.94, 1], [0.82, 1]], mix(C.accCol, [0, 0, 0], 0.2));
+    if (has("guitar") && front) P.poly([[0.08, 0.02], [0.18, 0.02], [0.92, 0.9], [0.82, 0.9]], [60, 40, 30]);
+  }
+  function drawSkirt(P) {
+    if (!P.side) return;
+    if (look.top === "dress" || look.top === "robe") pattern(P, look.pattern, C.topCol2, false);
+    P.quad(0, 1, 0.86, 0.96, look.top === "dress" || look.top === "robe" ? C.topCol2 : C.botCol2);
+  }
+  function drawPants(P) {
+    if (!P.side) return;
+    const outer = (P.part.side === 1 && P.face === "left") || (P.part.side === -1 && P.face === "right");
+    const c2 = C.botCol2;
+    switch (look.bottom) {
+      case "jeans": if (outer) P.line([[0.5, 0], [0.5, 1]], c2, 0.05, 1, 0.8); if (P.face === "front") P.quad(0, 1, 0, 0.05, c2, 1, 0.6); break;
+      case "ripped": if (outer) P.line([[0.5, 0], [0.5, 1]], c2, 0.05, 1, 0.8); if (P.face === "front") { P.poly([[0.25, 0.48], [0.75, 0.45], [0.7, 0.58], [0.3, 0.6]], C.skin); P.line([[0.25, 0.5], [0.75, 0.47]], WHITE, 0.03); } break;
+      case "cargo": if (outer) { P.quad(0.15, 0.85, 0.4, 0.65, C.botCol, 0.82); P.quad(0.15, 0.85, 0.4, 0.45, C.botCol, 0.7); } break;
+      case "track": if (outer) { P.quad(0.38, 0.48, 0, 1, c2); P.quad(0.54, 0.64, 0, 1, c2); } break;
+      case "shorts": P.quad(0, 1, 0.85, 1, c2, 0.9); break;
+    }
+  }
+  function drawShoe(P) {
+    if (!P.side) return;
+    switch (look.shoes) {
+      case "sneakers": if (P.face === "front") for (const v of [0.25, 0.55]) P.line([[0.3, v], [0.7, v]], WHITE, 0.06); break;
+      case "hightops": { const outer = (P.part.side === 1 && P.face === "left") || (P.part.side === -1 && P.face === "right"); if (outer) P.poly(starPts(0.5, 0.45, 0.22, 0.3), C.soleCol); P.quad(0, 1, 0, 0.12, C.soleCol); break; }
+      case "boots": P.quad(0, 1, 0, 0.1, C.shoeCol, 0.75); break;
+    }
+  }
+
+  /* ================= renderer ================= */
+  const cvs = document.getElementById("view"), ctx = cvs.getContext("2d");
+  let W = 1, H = 1, dpr = 1;
+  function resize() { const r = cvs.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1); W = Math.max(1, r.width); H = Math.max(1, r.height); cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr); }
+  new ResizeObserver(resize).observe(cvs); resize();
+
+  const cam = { yaw: 0.45, pitch: 0.18, dist: 16, tdist: 16, target: [0, 3, 0], focus: "full", pos: [0, 0, 0], f: [0, 0, 1], r: [1, 0, 0], u: [0, 1, 0], F: 600 };
+  function updateCamera(rig, D, dt) {
+    let tgt, dist;
+    const neckW = rig.neck.t, torsoW = add(rig.torso.t, [0, D.th / 2, 0]);
+    switch (cam.focus) {
+      case "head": tgt = add(neckW, [0, D.hh * 0.6, 0]); dist = 6.2 + D.hh * 1.5; break;
+      case "torso": tgt = torsoW; dist = 9.5; break;
+      case "legs": tgt = [0, D.lh * 0.55, 0]; dist = 9; break;
+      case "feet": tgt = [0, 0.6, 0]; dist = 7; break;
+      default: tgt = [0, (D.lh + D.th + D.hh) * 0.52, 0]; dist = 11 + (D.lh + D.th + D.hh) * 1.1;
+    }
+    const k = 1 - Math.exp(-dt * 5);
+    cam.target = cam.target.map((v, i) => lerp(v, tgt[i], k));
+    cam.dist = lerp(cam.dist, dist * cam.zoom, k);
+    const cp = cos(cam.pitch);
+    cam.pos = add(cam.target, [cam.dist * cp * sin(cam.yaw), cam.dist * sin(cam.pitch), cam.dist * cp * cos(cam.yaw)]);
+    cam.f = norm(sub(cam.target, cam.pos)); cam.r = norm(cross(cam.f, [0, 1, 0])); cam.u = cross(cam.r, cam.f);
+    cam.F = Math.min(H * 1.15, W * 1.5);
+  }
+  cam.zoom = 1;
+  const toCam = p => { const d = sub(p, cam.pos); return [dot(d, cam.r), dot(d, cam.u), dot(d, cam.f)]; };
+  const proj = c => [W / 2 + (c[0] * cam.F) / c[2], H * 0.5 - (c[1] * cam.F) / c[2]];
+  const project = p => { const c = toCam(p); return c[2] > 0.1 ? proj(c) : null; };
+  const LIGHT = norm([-0.45, 0.8, 0.55]);
+
+  const FACES = [
+    { name: "front", n: [0, 0, 1], idx: [6, 7, 5, 4] }, { name: "back", n: [0, 0, -1], idx: [3, 2, 0, 1] },
+    { name: "left", n: [1, 0, 0], idx: [7, 3, 1, 5] }, { name: "right", n: [-1, 0, 0], idx: [2, 6, 4, 0] },
+    { name: "top", n: [0, 1, 0], idx: [2, 3, 7, 6] }, { name: "bottom", n: [0, -1, 0], idx: [4, 5, 1, 0] },
+  ];
+
+  function makePainter(Pp, light, part, face) {
+    const map = (u, v) => { const tx = Pp[0][0] + (Pp[1][0] - Pp[0][0]) * u, ty = Pp[0][1] + (Pp[1][1] - Pp[0][1]) * u, bx = Pp[3][0] + (Pp[2][0] - Pp[3][0]) * u, by = Pp[3][1] + (Pp[2][1] - Pp[3][1]) * u; return [tx + (bx - tx) * v, ty + (by - ty) * v]; };
+    const size = Math.hypot(Pp[1][0] - Pp[0][0], Pp[1][1] - Pp[0][1]);
+    const path = pts => { ctx.beginPath(); pts.forEach((p, i) => { const s = map(p[0], p[1]); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }); };
+    const poly = (pts, col, k = 1, a = 1) => { path(pts); ctx.closePath(); ctx.fillStyle = rgbStr(col, light * k, a); ctx.fill(); };
+    const P = {
+      face, part, size, k: 1, side: face !== "top" && face !== "bottom",
+      poly,
+      quad: (u0, u1, v0, v1, col, k = 1, a = 1) => poly([[u0, v0], [u1, v0], [u1, v1], [u0, v1]], col, k, a),
+      ell: (cu, cv, ru, rv, col, k = 1, a = 1, n = 16) => { const pts = []; for (let i = 0; i < n; i++) { const t = (i / n) * TAU; pts.push([cu + ru * cos(t), cv + rv * sin(t)]); } poly(pts, col, k, a); },
+      line: (pts, col, w, k = 1, a = 1) => { path(pts); ctx.strokeStyle = rgbStr(col, light * k, a); ctx.lineWidth = Math.max(0.8, size * w); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(); },
+      ring: (cu, cv, ru, rv, col, w) => { const pts = []; for (let i = 0; i <= 20; i++) { const t = (i / 20) * TAU; pts.push([cu + ru * cos(t), cv + rv * sin(t)]); } P.line(pts, col, w); },
+      rect: (u0, u1, v0, v1, col, w) => P.line([[u0, v0], [u1, v0], [u1, v1], [u0, v1], [u0, v0]], col, w),
+    };
+    return P;
+  }
+
+  const particles = [];
+  function spawnFx(kind, rig, D) {
+    const head = add(rig.neck.t, mv(rig.neck.m, [0, D.hh, 0]));
+    const face = add(rig.neck.t, mv(rig.neck.m, [0, D.hh * 0.55, D.hd / 2]));
+    const r = Math.random;
+    if (kind === "tears") for (const sx of [1, -1]) particles.push({ kind, p: add(face, mv(rig.neck.m, [sx * D.hw * 0.17, 0, 0.05])), v: [sx * 0.4, 0.6, 0.6], life: 0.9, max: 0.9, g: 9 });
+    else particles.push({ kind, p: add(head, [(r() - 0.5) * 1.6, 0.2, (r() - 0.5) * 0.6]), v: [(r() - 0.5) * 0.6, 1.2 + r() * 0.6, 0], life: 1.8, max: 1.8, g: 0, rot: r() * TAU, s: 0.6 + r() * 0.5 });
+  }
+  function drawParticle(q) {
+    const s = project(q.p); if (!s) return;
+    const a = clamp(q.life / q.max * 1.4, 0, 1), sz = cam.F / Math.max(1, toCam(q.p)[2]) * 0.35 * (q.s || 1);
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(s[0], s[1]);
+    switch (q.kind) {
+      case "hearts": ctx.beginPath(); for (let i = 0; i < 24; i++) { const t = (i / 24) * TAU, x = 16 * Math.pow(sin(t), 3), y = 13 * cos(t) - 5 * cos(2 * t) - 2 * cos(3 * t) - cos(4 * t); i ? ctx.lineTo(x / 17 * sz, -y / 17 * sz) : ctx.moveTo(x / 17 * sz, -y / 17 * sz); } ctx.fillStyle = "#ff4f7b"; ctx.fill(); break;
+      case "notes": case "zzz": case "anger": ctx.font = `700 ${Math.round(sz * 1.6)}px "Chakra Petch", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.35)"; const ch = q.kind === "notes" ? (q.rot > 3 ? "♪" : "♫") : q.kind === "zzz" ? "Z" : "#"; ctx.strokeText(ch, 0, 0); ctx.fillStyle = q.kind === "notes" ? rgbStr(TH.accent) : q.kind === "zzz" ? "#ffffff" : "#ff5a4a"; ctx.fillText(ch, 0, 0); break;
+      case "sparkle": ctx.rotate(q.rot + q.life); ctx.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? sz * 0.25 : sz * 0.8, t = (i / 8) * TAU; ctx.lineTo(cos(t) * r, sin(t) * r); } ctx.closePath(); ctx.fillStyle = "#ffd75e"; ctx.fill(); break;
+      case "tears": ctx.beginPath(); ctx.ellipse(0, 0, sz * 0.18, sz * 0.26, 0, 0, TAU); ctx.fillStyle = "#5fb7ff"; ctx.fill(); break;
+      case "flame": { const fl = sz * (0.8 + 0.4 * Math.random()); ctx.beginPath(); ctx.moveTo(-fl * 0.35, 0); ctx.lineTo(fl * 0.35, 0); ctx.lineTo(0, fl * 1.8); ctx.closePath(); ctx.fillStyle = "#ff9a3d"; ctx.fill(); ctx.beginPath(); ctx.moveTo(-fl * 0.18, 0); ctx.lineTo(fl * 0.18, 0); ctx.lineTo(0, fl); ctx.closePath(); ctx.fillStyle = "#ffe48a"; ctx.fill(); break; }
+    }
+    ctx.restore();
+  }
+
+  function drawStage() {
+    // platform disc + soft shadow
+    const ring = (r, y) => { const pts = []; for (let i = 0; i < 48; i++) { const t = (i / 48) * TAU; const s = project([cos(t) * r, y, sin(t) * r]); if (s) pts.push(s); } return pts; };
+    const side = ring(5.2, -0.35), top = ring(5.2, 0);
+    if (top.length > 3) {
+      ctx.beginPath(); side.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = rgbStr(TH.edge); ctx.fill();
+      ctx.beginPath(); top.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = rgbStr(TH.platform); ctx.fill();
+      const inner = ring(4.6, 0.001); ctx.beginPath(); inner.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.strokeStyle = rgbStr(TH.accent, 1, 0.25); ctx.lineWidth = 2; ctx.stroke();
+    }
+    const sh = ring(1.9 / (1 + st.y * 0.2), 0.01).map(p => p);
+    if (sh.length > 3) { ctx.beginPath(); sh.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fill(); }
+  }
+
+  function drawAvatar(rig, pose) {
+    const items = [], glass = [];
+    for (const part of rig.parts) {
+      const hx = part.s[0] / 2, hy = part.s[1] / 2, hz = part.s[2] / 2, Wc = new Array(8), Sc = new Array(8);
+      let ok = true;
+      for (let i = 0; i < 8; i++) {
+        Wc[i] = add(part.j.t, mv(part.j.m, [part.c[0] + (i & 1 ? hx : -hx), part.c[1] + (i & 2 ? hy : -hy), part.c[2] + (i & 4 ? hz : -hz)]));
+        Sc[i] = project(Wc[i]); if (!Sc[i]) ok = false;
+      }
+      if (!ok) continue;
+      for (const f of FACES) {
+        const nW = mv(part.j.m, f.n);
+        const ctr = [0, 0, 0]; for (const i of f.idx) { ctr[0] += Wc[i][0] / 4; ctr[1] += Wc[i][1] / 4; ctr[2] += Wc[i][2] / 4; }
+        const eye = sub(cam.pos, ctr);
+        if (dot(nW, eye) <= 0) continue;
+        const it = { d: Math.hypot(eye[0], eye[1], eye[2]) - part.bias, pts: f.idx.map(i => Sc[i]), part, face: f.name, light: 0.56 + 0.44 * max(0, dot(nW, LIGHT)) };
+        (part.alpha ? glass : items).push(it);
+      }
+    }
+    for (const ex of rig.extras) {
+      if (ex.kind === "line") { const a = project(ex.a), b = project(ex.b); if (a && b) items.push({ d: Math.hypot(...sub(cam.pos, ex.b)), line: [a, b] }); }
+    }
+    items.sort((a, b) => b.d - a.d);
+    ctx.lineJoin = "round";
+    for (const F of items) {
+      if (F.line) { ctx.beginPath(); ctx.moveTo(F.line[0][0], F.line[0][1]); ctx.lineTo(F.line[1][0], F.line[1][1]); ctx.strokeStyle = "rgba(240,240,240,0.9)"; ctx.lineWidth = 1.2; ctx.stroke(); continue; }
+      const p = F.part;
+      let col = p.col;
+      if (p.kind === "arm" && F.face === "bottom" && p.col === C.topCol) col = C.skin;
+      ctx.beginPath(); F.pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath();
+      ctx.fillStyle = rgbStr(col, F.light); ctx.fill();
+      ctx.strokeStyle = rgbStr(col, F.light * 0.74); ctx.lineWidth = 0.8; ctx.stroke();
+      if (p.deco) { const P = makePainter(F.pts, F.light, p, F.face); p.deco(P, pose); }
+    }
+    for (const F of glass.sort((a, b) => b.d - a.d)) {
+      ctx.beginPath(); F.pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath();
+      ctx.fillStyle = rgbStr(F.part.col, F.light, F.part.alpha); ctx.fill(); ctx.strokeStyle = rgbStr(WHITE, 1, 0.5); ctx.lineWidth = 1; ctx.stroke();
+    }
+    for (const ex of rig.extras) if (ex.kind === "flame") drawParticle({ kind: "flame", p: add(ex.j.t, mv(ex.j.m, ex.at)), life: 1, max: 1, s: 1.4 });
+  }
+
+  /* ================= input: orbit & zoom ================= */
+  let drag = null;
+  cvs.addEventListener("pointerdown", e => { cvs.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+  cvs.addEventListener("pointermove", e => { if (!drag || drag.id !== e.pointerId) return; cam.yaw -= (e.clientX - drag.x) * 0.008; cam.pitch = clamp(cam.pitch + (e.clientY - drag.y) * 0.005, -0.25, 1.1); drag.x = e.clientX; drag.y = e.clientY; });
+  cvs.addEventListener("pointerup", () => (drag = null)); cvs.addEventListener("pointercancel", () => (drag = null));
+  cvs.addEventListener("wheel", e => { e.preventDefault(); cam.zoom = clamp(cam.zoom * Math.exp(e.deltaY * 0.001), 0.55, 1.8); }, { passive: false });
+
+  /* ================= UI ================= */
+  const TABS = [
+    { id: "body", label: "Body", focus: "full" }, { id: "face", label: "Face", focus: "head" }, { id: "hair", label: "Hair", focus: "head" },
+    { id: "headwear", label: "Headwear", focus: "head" }, { id: "top", label: "Tops", focus: "torso" }, { id: "bottom", label: "Bottoms", focus: "legs" },
+    { id: "shoes", label: "Shoes", focus: "feet" }, { id: "extras", label: "Extras", focus: "full" }, { id: "emotes", label: "Emotes", focus: "full" },
+    { id: "outfits", label: "Outfits", focus: "full" },
+  ];
+  let tab = store.get("tab", "body");
+  if (!TABS.some(t => t.id === tab)) tab = "body";
+  const tabsEl = document.getElementById("tabs"), contentEl = document.getElementById("content");
+  const el = (tag, props = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === "on") for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn); else if (k === "text") n.textContent = v; else if (k in n && k !== "style") n[k] = v; else n.setAttribute(k, v); } n.append(...kids.filter(Boolean)); return n; };
+
+  function tiles(key, label, opts = {}) {
+    const multi = Array.isArray(look[key]);
+    const grid = el("div", { class: "tiles" });
+    for (const o of CAT[key]) {
+      const on = multi ? look[key].includes(o.v) : look[key] === o.v;
+      grid.append(el("button", { type: "button", id: `opt-${key}-${o.v}`, "aria-pressed": String(on), text: o.l, on: { click: () => {
+        const next = Object.assign({}, look);
+        if (multi) {
+          let arr = look[key].slice();
+          if (arr.includes(o.v)) arr = arr.filter(v => v !== o.v);
+          else { if (key === "acc" && BACK_SLOT.includes(o.v)) arr = arr.filter(v => !BACK_SLOT.includes(v)); arr.push(o.v); }
+          next[key] = arr;
+        } else next[key] = o.v;
+        setLook(next);
+      } } }));
+    }
+    return el("div", { class: "sec" }, el("h2", {}, label, opts.hint ? el("small", { text: opts.hint }) : null), grid);
+  }
+  function colors(key, label, pal) {
+    const row = el("div", { class: "colors" });
+    for (const hex of pal) row.append(el("button", { type: "button", "aria-label": `${label} ${hex}`, "aria-pressed": String(look[key] === hex), style: `background:${hex}`, on: { click: () => setLook(Object.assign({}, look, { [key]: hex })) } }));
+    const inp = el("input", { type: "color", id: `col-${key}`, value: look[key], "aria-label": `Custom ${label.toLowerCase()}` });
+    inp.addEventListener("input", () => { look[key] = inp.value; refreshColors(); });
+    inp.addEventListener("change", () => setLook(Object.assign({}, look, { [key]: inp.value })));
+    row.append(inp);
+    return el("div", { class: "sec" }, el("h2", { text: label }), row);
+  }
+
+  const toast = el("div", { class: "toast", role: "status" });
+  function say(msg) { toast.textContent = msg; clearTimeout(say.t); say.t = setTimeout(() => (toast.textContent = ""), 2600); }
+
+  function renderTabs() {
+    tabsEl.replaceChildren(...TABS.map(t => el("button", { type: "button", role: "tab", id: `tab-${t.id}`, "aria-selected": String(t.id === tab), text: t.label, on: { click: () => { tab = t.id; store.set("tab", tab); cam.focus = t.focus; renderTabs(); renderPanel(); } } })));
+  }
+  function renderPanel() {
+    const keepScroll = contentEl.scrollTop;
+    const S = [];
+    switch (tab) {
+      case "body": S.push(tiles("body", "Body type"), tiles("head", "Head shape"), colors("skin", "Skin tone", PAL.skin)); break;
+      case "face": S.push(tiles("eyes", "Eyes"), colors("eyeCol", "Eye color", PAL.eye), tiles("brows", "Eyebrows"), tiles("mouth", "Mouth"), colors("lipCol", "Mouth color", PAL.lip), tiles("fx", "Face details", { hint: "pick any" }), tiles("facial", "Facial hair")); break;
+      case "hair": S.push(tiles("hair", "Hairstyle"), colors("hairCol", "Hair color", PAL.hair), colors("hairCol2", "Highlights and ties", PAL.hair)); break;
+      case "headwear": S.push(tiles("hat", "Hat"), colors("hatCol", "Hat color", PAL.cloth), colors("hatCol2", "Hat trim", PAL.cloth), tiles("glasses", "Glasses"), colors("glassCol", "Frame color", PAL.cloth)); break;
+      case "top": {
+        S.push(tiles("top", "Top"), tiles("pattern", "Print", { hint: "tees, hoodies, dresses" }), colors("topCol", "Main color", PAL.cloth), colors("topCol2", "Accent color", PAL.cloth));
+        if (look.top === "jersey") { const n = el("input", { type: "number", id: "jerseyNum", min: "0", max: "99", value: String(look.number) }); n.addEventListener("change", () => setLook(Object.assign({}, look, { number: +n.value }))); S.push(el("div", { class: "sec" }, el("h2", { text: "Jersey number" }), n)); }
+        break;
+      }
+      case "bottom": S.push(tiles("bottom", "Bottoms"), colors("botCol", "Main color", PAL.cloth), colors("botCol2", "Accent color", PAL.cloth)); break;
+      case "shoes": S.push(tiles("shoes", "Shoes"), colors("shoeCol", "Shoe color", PAL.cloth), colors("soleCol", "Sole and trim", PAL.cloth)); break;
+      case "extras": S.push(tiles("acc", "Accessories", { hint: "one back item at a time" }), colors("accCol", "Accessory color", PAL.cloth)); break;
+      case "emotes": {
+        const grid = el("div", { class: "tiles emotes" });
+        EMOTES.forEach(([id, label], i) => grid.append(el("button", { type: "button", id: `emote-${id}`, "aria-pressed": String(st.emote === id), on: { click: () => playEmote(st.emote === id ? null : id) } }, label, el("span", { text: i < 9 ? `key ${i + 1}` : " " }))));
+        S.push(el("div", { class: "sec" }, el("h2", {}, "Emotes", el("small", { text: `${EMOTES.length} moves` })), grid), el("p", { class: "note", text: "Emotes loop until you stop them or pick a movement. Keys 1–9 play the first nine." }));
+        break;
+      }
+      case "outfits": {
+        const pre = el("div", { class: "presets" });
+        for (const [name, desc, over] of PRESETS) pre.append(el("button", { type: "button", id: `preset-${name.toLowerCase().replace(/\W+/g, "-")}`, on: { click: () => { setLook(Object.assign({}, DEFAULT, over)); say(`${name} outfit on.`); } } }, name, el("span", { text: desc })));
+        const slots = el("div", { class: "row" });
+        for (let i = 1; i <= 3; i++) {
+          const saved = store.get("slot" + i, null);
+          slots.append(el("div", { class: "row" },
+            el("button", { type: "button", id: `save-${i}`, text: `Save to slot ${i}`, on: { click: () => { store.set("slot" + i, look); say(`Saved to slot ${i}.`); renderPanel(); } } }),
+            el("button", { type: "button", id: `load-${i}`, text: `Load ${i}`, disabled: !saved, on: { click: () => { setLook(store.get("slot" + i, look)); say(`Loaded slot ${i}.`); } } })));
+        }
+        const code = el("textarea", { id: "lookCode", readOnly: true, "aria-label": "Your look code" }); code.value = encodeLook(look);
+        const paste = el("textarea", { id: "pasteCode", placeholder: "Paste a BL1. code here", "aria-label": "Paste a look code" });
+        S.push(
+          el("div", { class: "sec" }, el("h2", { text: "Preset outfits" }), pre),
+          el("div", { class: "sec" }, el("h2", { text: "Start over" }), el("div", { class: "row" },
+            el("button", { type: "button", id: "randomize2", text: "Randomize everything", on: { click: randomize } }),
+            el("button", { type: "button", id: "resetLook", text: "Reset to default", on: { click: () => { setLook(DEFAULT); say("Back to the default look."); } } }))),
+          el("div", { class: "sec" }, el("h2", {}, "Save slots", el("small", { text: "kept in this browser" })), slots),
+          el("div", { class: "sec" }, el("h2", { text: "Share your look" }), code, el("div", { class: "row" },
+            el("button", { type: "button", id: "copyCode", text: "Copy code", on: { click: () => { const done = () => say("Code copied."); try { navigator.clipboard.writeText(code.value).then(done, () => { code.select(); say("Press Ctrl+C to copy."); }); } catch { code.select(); say("Press Ctrl+C to copy."); } } } })),
+            paste, el("div", { class: "row" }, el("button", { type: "button", id: "applyCode", text: "Apply code", on: { click: () => { const l = decodeLook(paste.value); if (l) { setLook(l); say("Look applied."); } else say("That code didn't work. It should start with BL1."); } } }))),
+        );
+        break;
+      }
+    }
+    S.push(toast);
+    contentEl.replaceChildren(...S);
+    contentEl.scrollTop = keepScroll;
+  }
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function randomize() {
+    const l = {};
+    for (const k of ["body", "head", "eyes", "brows", "mouth", "facial", "hair", "hat", "glasses", "top", "pattern", "bottom", "shoes"]) l[k] = pick(CAT[k]).v;
+    if (Math.random() < 0.5) l.hat = "none"; if (Math.random() < 0.55) l.glasses = "none"; if (Math.random() < 0.6) l.facial = "none";
+    l.skin = pick(PAL.skin.slice(0, 8)); l.eyeCol = pick(PAL.eye); l.lipCol = pick(PAL.lip); l.hairCol = pick(PAL.hair); l.hairCol2 = pick(PAL.hair);
+    for (const k of ["hatCol", "hatCol2", "glassCol", "topCol", "topCol2", "botCol", "botCol2", "shoeCol", "soleCol", "accCol"]) l[k] = pick(PAL.cloth);
+    l.fx = CAT.fx.map(x => x.v).filter(() => Math.random() < 0.25);
+    l.acc = CAT.acc.map(x => x.v).filter(() => Math.random() < 0.12);
+    l.number = Math.floor(Math.random() * 100);
+    setLook(l); say("Rolled a new look.");
+  }
+
+  const playingEl = document.getElementById("playing"), playingName = document.getElementById("playingName");
+  function playEmote(id) {
+    st.emote = id;
+    playingEl.hidden = !id;
+    if (id) { playingName.textContent = EMOTES.find(e => e[0] === id)[1]; setMotion("idle"); }
+    if (tab === "emotes") renderPanel();
+  }
+  document.getElementById("stopEmote").addEventListener("click", () => playEmote(null));
+  const motionBtns = [...document.querySelectorAll("[data-motion]")];
+  function setMotion(m) { st.motion = m; motionBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.motion === m))); if (m !== "idle" && st.emote) playEmote(null); }
+  motionBtns.forEach(b => b.addEventListener("click", () => setMotion(b.dataset.motion)));
+  const spinBtn = document.getElementById("spinBtn");
+  spinBtn.addEventListener("click", () => { st.spin = !st.spin; spinBtn.setAttribute("aria-pressed", String(st.spin)); });
+  document.getElementById("randBtn").addEventListener("click", randomize);
+  window.addEventListener("keydown", e => {
+    if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (/^Digit[1-9]$/.test(e.code)) { const em = EMOTES[+e.code.slice(5) - 1]; if (em) playEmote(st.emote === em[0] ? null : em[0]); }
+  });
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { st.spin = false; spinBtn.setAttribute("aria-pressed", "false"); }
+
+  cam.focus = TABS.find(t => t.id === tab).focus;
+  renderTabs(); renderPanel();
+
+  /* ================= loop ================= */
+  let last = performance.now(), fxAcc = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const D = dimsOf(look);
+    // close-up tabs turn the face toward the camera; otherwise the turntable spins
+    if (cam.focus === "head" && !drag) { const d0 = cam.yaw - 0.35 - st.yaw; st.yaw += Math.atan2(sin(d0), cos(d0)) * (1 - Math.exp(-dt * 4)); }
+    else if (st.spin && !drag) st.yaw += dt * 0.45;
+    const pose = animate(dt, D);
+    const rig = buildRig(pose, D);
+    updateCamera(rig, D, dt);
+    if (pose.fx) { fxAcc += dt * (pose.fx === "tears" ? 5 : 3); while (fxAcc > 1) { fxAcc -= 1; spawnFx(pose.fx, rig, D); } }
+    for (let i = particles.length - 1; i >= 0; i--) { const q = particles[i]; q.life -= dt; q.v[1] -= (q.g || 0) * dt; q.p = add(q.p, q.v.map(v => v * dt)); if (q.life <= 0) particles.splice(i, 1); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    drawStage();
+    drawAvatar(rig, pose);
+    for (const q of particles) drawParticle(q);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
