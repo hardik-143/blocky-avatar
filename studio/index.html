@@ -190,7 +190,9 @@
     shoes: O(["sneakers", "Sneakers"], ["hightops", "High-tops"], ["boots", "Boots"], ["sandals", "Sandals"], ["slippers", "Slippers"], ["barefoot", "Barefoot"]),
     acc: O(["backpack", "Backpack"], ["jetpack", "Jetpack"], ["guitar", "Guitar"], ["cape", "Cape"], ["wings", "Wings"], ["tail", "Tail"], ["scarf", "Scarf"], ["necklace", "Chain"], ["bowtie", "Bow tie"], ["belt", "Belt"], ["wristbands", "Wristbands"], ["earrings", "Earrings"], ["satchel", "Satchel"], ["balloon", "Balloon"]),
   };
-  const BACK_SLOT = ["backpack", "jetpack", "guitar"];
+  // items that would occupy the same space replace each other
+  const CLASH = [["backpack", "jetpack", "guitar"], ["cape", "tail"], ["guitar", "tail"]];
+  function addAcc(arr, v) { const out = new Set(CLASH.filter(g => g.includes(v)).flat()); return arr.filter(x => x !== v && !out.has(x)).concat([v]); }
   const EMOTES = [
     ["wave", "Wave"], ["dance", "Disco"], ["robot", "Robot"], ["shuffle", "Shuffle"], ["wiggle", "Wiggle"], ["cheer", "Cheer"],
     ["clap", "Clap"], ["bow", "Bow"], ["salute", "Salute"], ["point", "Point"], ["laugh", "Laugh"], ["shrug", "Shrug"],
@@ -224,7 +226,7 @@
     for (const k of ["body", "head", "eyes", "brows", "mouth", "facial", "hair", "hat", "glasses", "top", "pattern", "bottom", "shoes"])
       if (CAT[k].some(x => x.v === src[k])) o[k] = src[k];
     if (Array.isArray(src.fx)) o.fx = CAT.fx.map(x => x.v).filter(v => src.fx.includes(v));
-    if (Array.isArray(src.acc)) { o.acc = CAT.acc.map(x => x.v).filter(v => src.acc.includes(v)); const b = o.acc.filter(v => BACK_SLOT.includes(v)); if (b.length > 1) o.acc = o.acc.filter(v => !BACK_SLOT.includes(v) || v === b[0]); }
+    if (Array.isArray(src.acc)) { o.acc = []; for (const v of CAT.acc.map(x => x.v).filter(v => src.acc.includes(v))) o.acc = addAcc(o.acc, v); }
     if (Number.isFinite(+src.number)) o.number = clamp(Math.round(+src.number), 0, 99);
     return o;
   }
@@ -314,7 +316,7 @@
     stretch(t) { const p = base(), s = sin(t * 0.9); p.armL = [-0.15, 0, 2.95]; p.armR = [-0.15, 0, -2.95]; p.root = [0, 0, 0.14 * s]; p.torso = [-0.08, 0, 0.1 * s]; p.head = [-0.2, 0, 0.1 * s]; p.mouthO = "o"; p.eyeO = "closed"; return p; },
     sit(t) { const p = base(), b = sin(t * 1.6); p.legL = [-1.5, 0, 0.06]; p.legR = [-1.5, 0, -0.06]; p.armL = [-0.35, 0, 0.15]; p.armR = [-0.35, 0, -0.15]; p.torso = [-0.06 + 0.015 * b, 0, 0]; p.head = [0.04, 0.3 * sin(t * 0.4), 0]; return p; },
     sleep(t) { const p = base(), b = sin(t * 1.4); p.root = [-1.52, 0, 0]; p.armL = [0, 0, 0.1]; p.armR = [0, 0, -0.1]; p.head = [-0.05, 0, 0.1]; p.torso = [0.01 * b, 0, 0]; p.fixW = 1; p.fixY = 0.55; p.eyeO = "closed"; p.mouthO = "o"; p.fx = "zzz"; return p; },
-    meditate(t) { const p = base(); p.legL = [-1.45, -0.6, 0]; p.legR = [-1.45, 0.6, 0]; p.armL = [-0.6, 0, 0.5]; p.armR = [-0.6, 0, -0.5]; p.fixW = 1; p.fixY = 1.0 + 0.25 * sin(t * 1.5); p.eyeO = "closed"; p.mouthO = "smile"; p.fx = "sparkle"; return p; },
+    meditate(t) { const p = base(); p.legL = [-1.45, 0.5, 0]; p.legR = [-1.45, -0.5, 0]; p.armL = [-0.6, 0, 0.5]; p.armR = [-0.6, 0, -0.5]; p.fixW = 1; p.fixY = 1.0 + 0.25 * sin(t * 1.5); p.eyeO = "closed"; p.mouthO = "smile"; p.fx = "sparkle"; return p; },
     zombie(t) { const p = base(), s = sin(t * 2.2); p.armL = [-1.5 + 0.08 * s, 0, 0.08]; p.armR = [-1.5 - 0.08 * s, 0, -0.08]; p.legL = [-0.25 * s, 0, 0]; p.legR = [0.25 * s, 0, 0]; p.torso = [0.12, 0.1 * s, 0.05 * s]; p.head = [0.18, 0.15 * s, 0.35]; p.root = [0, 0, 0.04 * s]; p.eyeO = "sleepy"; p.mouthO = "flat"; return p; },
   };
   function blend(list) {
@@ -352,105 +354,184 @@
   }
 
   /* ================= rig: build every box ================= */
-  const footDepth = (e, D) => { const a = Math.hypot(e[0], e[2]); return D.lh * cos(a) + (D.lw / 2) * abs(sin(a)); };
-  const hidesHair = h => !["none", "headphones", "bandana", "catears", "bunny", "horns", "halo", "antenna"].includes(h);
+  // Every block is placed against the outer surface of what is already there, so nothing sinks into
+  // anything else. Joints rock on the edge they tip toward, and arms, satchel and balloon are pushed out
+  // of anything they would cut into.
+    const hidesHair = h => !["none", "headphones", "bandana", "catears", "bunny", "horns", "halo", "antenna"].includes(h);
+  const tr3 = m => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+  const toLocal = (f, p) => mv(tr3(f.m), sub(p, f.t));
+  const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
+  function cornersOf(part) {
+    const out = new Array(8);
+    for (let i = 0; i < 8; i++) {
+      const l = part.pts ? part.pts[i] : [part.c[0] + (i & 1 ? 0.5 : -0.5) * part.s[0], part.c[1] + (i & 2 ? 0.5 : -0.5) * part.s[1], part.c[2] + (i & 4 ? 0.5 : -0.5) * part.s[2]];
+      out[i] = add(part.j.t, mv(part.j.m, l));
+    }
+    return out;
+  }
+  function boundsIn(f, part) {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const p of cornersOf(part)) { const q = toLocal(f, p); for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q[k]); hi[k] = Math.max(hi[k], q[k]); } }
+    return { lo, hi };
+  }
+  // how far a list of parts reaches along one axis (0 x, 1 y, 2 z) in frame f, counting only parts inside the band
+  function reach(list, axis, sign, band, f) {
+    let r = -Infinity;
+    for (const p of list) {
+      const b = boundsIn(f, p);
+      if (band.y && (b.hi[1] < band.y[0] + 0.02 || b.lo[1] > band.y[1] - 0.02)) continue;
+      if (band.x && (b.hi[0] < band.x[0] + 0.02 || b.lo[0] > band.x[1] - 0.02)) continue;
+      if (band.z && (b.hi[2] < band.z[0] + 0.02 || b.lo[2] > band.z[1] - 0.02)) continue;
+      r = Math.max(r, sign > 0 ? b.hi[axis] : -b.lo[axis]);
+    }
+    return r;
+  }
+  // a block standing on something tips about the bottom edge it leans toward; a hanging block swings about the top edge
+  function standFrame(parent, base, e, hx, hz) {
+    const f = child(parent, base, rotY(e[1])), px = -sgn(e[2]) * hx, pz = sgn(e[0]) * hz;
+    return child(child(f, [px, 0, pz], mul(rotX(e[0]), rotZ(e[2]))), [-px, 0, -pz], null);
+  }
+  function hangFrame(parent, base, e, hx, hz, side = 0) {
+    const yx = -side * hx, yz = -sgn(e[1]) * side * hz;
+    const f = child(child(parent, add(base, [yx, 0, yz]), rotY(e[1])), [-yx, 0, -yz], null), px = sgn(e[2]) * hx, pz = -sgn(e[0]) * hz;
+    return child(child(f, [px, 0, pz], mul(rotX(e[0]), rotZ(e[2]))), [-px, 0, -pz], null);
+  }
+  // separating-axis test between two convex blocks: how deep they overlap and which way pushes A out of B
+  const EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  function polyOf(part) {
+    const v = cornersOf(part);
+    const n = FACES.map(f => norm(cross(sub(v[f.idx[3]], v[f.idx[0]]), sub(v[f.idx[1]], v[f.idx[0]]))));
+    const e = (part.pts ? EDGES : [[0, 1], [0, 2], [0, 4]]).map(([a, b]) => norm(sub(v[b], v[a])));
+    const c = [0, 0, 0]; for (const p of v) { c[0] += p[0] / 8; c[1] += p[1] / 8; c[2] += p[2] / 8; }
+    return { v, n: part.pts ? n : [n[0], n[2], n[4]], e, c };
+  }
+  function sat(A, B) {
+    let best = Infinity, axis = null;
+    const test = ax => {
+      const l = Math.hypot(ax[0], ax[1], ax[2]); if (l < 1e-6) return true;
+      ax = [ax[0] / l, ax[1] / l, ax[2] / l];
+      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+      for (const p of A.v) { const q = dot(p, ax); if (q < a0) a0 = q; if (q > a1) a1 = q; }
+      for (const p of B.v) { const q = dot(p, ax); if (q < b0) b0 = q; if (q > b1) b1 = q; }
+      const o = Math.min(a1, b1) - Math.max(a0, b0);
+      if (o <= 0) return false;
+      if (o < best) { best = o; const s = dot(sub(A.c, B.c), ax) >= 0 ? 1 : -1; axis = [ax[0] * s, ax[1] * s, ax[2] * s]; }
+      return true;
+    };
+    for (const ax of A.n) if (!test(ax)) return { depth: 0 };
+    for (const ax of B.n) if (!test(ax)) return { depth: 0 };
+    for (const a of A.e) for (const b of B.e) if (!test(cross(a, b))) return { depth: 0 };
+    return { depth: best, axis };
+  }
+  // move a frame (and every part hung on it) out of the obstacles, by at most maxShift
+  function pushFrame(frame, movers, obstacles, maxShift) {
+    const obs = obstacles.map(polyOf), start = frame.t.slice();
+    for (let it = 0; it < 10; it++) {
+      let moved = false;
+      for (const mp of movers) for (const ob of obs) {
+        const r = sat(polyOf(mp), ob);
+        if (r.depth > 0.004) { frame.t = add(frame.t, r.axis.map(x => x * (r.depth + 0.004))); moved = true; }
+      }
+      if (!moved) break;
+    }
+    const dv = sub(frame.t, start), L = Math.hypot(dv[0], dv[1], dv[2]);
+    if (L > maxShift) frame.t = add(start, dv.map(x => (x * maxShift) / L));
+  }
+  function legLocal(e, side, D) { return hangFrame({ m: I3, t: [0, 0, 0] }, [side * (D.tw / 2 - D.lw / 2), 0, 0], e, D.lw / 2, D.lw / 2, side); }
+  function lowestY(f, D) {
+    let lo = Infinity;
+    const bx = [[[0, -D.lh / 2, 0], [D.lw, D.lh, D.lw]]];
+    if (look.shoes === "slippers") bx.push([[0, -D.lh + 0.13, 0.12], [D.lw + 0.12, 0.28, D.lw + 0.34]]);
+    for (const [c, s] of bx) for (let i = 0; i < 8; i++) lo = Math.min(lo, f.t[1] + mv(f.m, [c[0] + (i & 1 ? 0.5 : -0.5) * s[0], c[1] + (i & 2 ? 0.5 : -0.5) * s[1], c[2] + (i & 4 ? 0.5 : -0.5) * s[2]])[1]);
+    return lo;
+  }
 
   function buildRig(pose, D) {
     const parts = [], extras = [];
-    const box = (j, c, s, col, o = {}) => parts.push(Object.assign({ j, c, s, col, bias: 0 }, o));
-    const yawM = rotY(st.yaw), sw = mv(yawM, [pose.sway, 0, 0]);
-    const planted = Math.max(footDepth(pose.legL, D), footDepth(pose.legR, D)) + pose.lift;
-    const rootY = lerp(planted, pose.fixY + pose.fixL * D.lh, clamp(pose.fixW, 0, 1)) + st.y;
-    const root = { m: mul(yawM, euler(pose.root)), t: [sw[0], rootY, sw[2]] };
-    const torso = child(root, [0, 0, 0], euler(pose.torso));
-    const neck = child(torso, [0, D.th, 0], euler(pose.head));
-    const shY = D.th - D.aw * 0.5, shX = D.tw / 2 + D.aw / 2;
-    // with a skirt, hanging arms swing out a little so hands clear the hem
+    const box = (j, c, s, col, o = {}) => { const p = Object.assign({ j, c, s, col, bias: 0 }, o); parts.push(p); return p; };
+    const t = st.clock, w = D.hw, h = D.hh, d = D.hd, th = D.th, bz = D.td / 2;
+    const has = k => look.acc.includes(k);
     const skirtish = look.top === "dress" || look.top === "robe" || look.bottom === "skirt";
-    const armOut = skirtish ? 0.1 : 0;
-    const shL = child(torso, [shX, shY, 0], euler([pose.armL[0], pose.armL[1], pose.armL[2] + armOut])), shR = child(torso, [-shX, shY, 0], euler([pose.armR[0], pose.armR[1], pose.armR[2] - armOut]));
-    const hx = D.tw / 2 - D.lw / 2;
-    const hipL = child(root, [hx, 0, 0], euler(pose.legL)), hipR = child(root, [-hx, 0, 0], euler(pose.legR));
-    const t = st.clock, w = D.hw, h = D.hh, d = D.hd;
 
-    // torso & head
+    // ---- skeleton ----
+    const lfL = legLocal(pose.legL, 1, D), lfR = legLocal(pose.legR, -1, D);
+    const planted = -Math.min(lowestY(lfL, D), lowestY(lfR, D)) + pose.lift;
+    const rootY = lerp(planted, pose.fixY + pose.fixL * D.lh, clamp(pose.fixW, 0, 1)) + st.y;
+    const yawM = rotY(st.yaw), sw = mv(yawM, [pose.sway, 0, 0]);
+    const root = { m: mul(yawM, euler(pose.root)), t: [sw[0], rootY, sw[2]] };
+    const torso = standFrame(root, [0, 0, 0], pose.torso, D.tw / 2, bz);
+    const headE = look.hair === "long" ? [Math.max(pose.head[0], -0.2), pose.head[1], pose.head[2]] : pose.head;
+    const neck = standFrame(torso, [0, th, 0], headE, w / 2, d / 2);
+    const inRoot = lf => ({ m: mul(root.m, lf.m), t: add(root.t, mv(root.m, lf.t)) });
+    const hipL = inRoot(lfL), hipR = inRoot(lfR);
+    const legProxy = j => ({ j, c: [0, -D.lh / 2, 0], s: [D.lw, D.lh, D.lw] });
+    pushFrame(hipR, [legProxy(hipR)], [legProxy(hipL)], 0.8);   // crossed legs rest on each other
+
+    // ---- torso & head ----
     const torsoCol = look.top === "overalls" ? C.topCol2 : C.topCol;
-    box(torso, [0, D.th / 2, 0], [D.tw, D.th, D.td], torsoCol, { kind: "torso", deco: drawTorso });
-    box(neck, [0, h / 2, 0], [w, h, d], C.skin, { kind: "head", bias: 0.02, deco: drawFace });
+    box(torso, [0, th / 2, 0], [D.tw, th, D.td], torsoCol, { kind: "torso", grp: "torso", deco: drawTorso });
+    const headPart = box(neck, [0, h / 2, 0], [w, h, d], C.skin, { kind: "head", grp: "head", bias: 0.02, deco: drawFace });
 
-    // arms: sleeve segment + skin (or glove) segment
-    const sleeve = { tee: 0.42, polo: 0.42, jersey: 0.4, tank: 0, dress: 0.22, overalls: 0.42 }[look.top] ?? 0.84;
-    const armTop = D.aw * 0.5;
-    for (const [j, side] of [[shL, 1], [shR, -1]]) {
-      const seg = (v0, v1, col, o = {}) => box(j, [0, armTop - (v0 + v1) / 2 * D.ah, 0], [D.aw + (o.inf || 0), (v1 - v0) * D.ah, D.aw + (o.inf || 0)], col, Object.assign({ kind: "arm", side }, o));
-      const hand = look.top === "spacesuit" ? C.topCol2 : C.skin;
-      if (sleeve > 0) seg(0, sleeve, C.topCol, { deco: look.top === "jersey" ? (P) => P.side && P.quad(0, 1, 0.88, 1, C.topCol2) : null });
-      seg(sleeve, 1, sleeve >= 0.84 ? hand : C.skin);
-      if (look.acc.includes("wristbands")) seg(0.68, 0.78, C.accCol, { inf: 0.1, bias: 0.03 });
-    }
-    // legs: trousers + skin + shoe
+    // ---- legs: trousers + skin + shoe ----
     const shoeH = { sneakers: 0.15, hightops: 0.27, boots: 0.36, sandals: 0.06, slippers: 0.12, barefoot: 0 }[look.shoes];
-    // under a skirt the thigh is never drawn: the leg starts where the hem ends
     const skirtLen = !skirtish ? 0 : look.top === "robe" ? D.lh * (1 - shoeH) - 0.12 : look.top === "dress" ? D.lh * 0.6 : D.lh * 0.48;
     const hiddenV = skirtLen / D.lh;
     const pantEnd = skirtish ? 0 : look.bottom === "shorts" ? 0.45 : 1 - shoeH;
     const skirtCol = look.bottom === "skirt" && look.top !== "dress" && look.top !== "robe" ? C.botCol : C.topCol;
-    const isSteep = e => mv(euler(e), [0, -1, 0])[1] < -0.75;
-    for (const [j, side, e] of [[hipL, 1, pose.legL], [hipR, -1, pose.legR]]) {
+    const steepOf = lf => mv(lf.m, [0, -1, 0])[1] < -0.75;
+    const legParts = [];
+    for (const [j, side, lf] of [[hipL, 1, lfL], [hipR, -1, lfR]]) {
       // A leg pointing mostly down leaves the skirt through the hem, so its thigh is hidden inside the skirt.
       // A leg lifted forward or back (kick, sit, big strides) takes the skirt fabric with it instead.
-      const steep = isSteep(e);
-      const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side, steep }, o)); };
+      const steep = steepOf(lf), grp = side > 0 ? "legL" : "legR";
+      const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) legParts.push(box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side, steep, grp }, o))); };
       const pants = look.top === "spacesuit" && look.bottom === "pants" ? C.topCol : C.botCol;
       seg(0, pantEnd, pants, { deco: drawPants });
-      if (skirtish && !steep) seg(0, hiddenV, skirtCol, { inf: 0.1, bias: 0.02, deco: drawSkirt, fabric: true });
+      if (skirtish && !steep) seg(0, hiddenV, skirtCol, { bias: 0.02, deco: drawSkirt, fabric: true });
       seg(Math.max(pantEnd, hiddenV), 1 - shoeH, C.skin);
       if (shoeH > 0) {
         if (look.shoes === "sandals") seg(1 - shoeH, 1, C.soleCol, { deco: P => P.side && P.quad(0, 1, -2.5, -1.2, C.shoeCol) });
-        else if (look.shoes === "slippers") box(j, [0, -D.lh + 0.13, 0.12], [D.lw + 0.18, 0.28, D.lw + 0.34], C.shoeCol, { kind: "leg", side, bias: 0.02, deco: P => P.face === "front" && (P.ell(0.3, 0.45, 0.08, 0.14, INK), P.ell(0.7, 0.45, 0.08, 0.14, INK)) });
-        else {
-          seg(1 - shoeH, 1 - 0.05, C.shoeCol, { deco: drawShoe });
-          seg(1 - 0.05, 1, C.soleCol);
-        }
+        else if (look.shoes === "slippers") legParts.push(box(j, [side * 0.06, -D.lh + 0.13, 0.12], [D.lw + 0.12, 0.28, D.lw + 0.34], C.shoeCol, { kind: "leg", side, grp, wrap: true, bias: 0.02, deco: P => P.face === "front" && (P.ell(0.3, 0.45, 0.08, 0.14, INK), P.ell(0.7, 0.45, 0.08, 0.14, INK)) }));
+        else { seg(1 - shoeH, 1 - 0.05, C.shoeCol, { deco: drawShoe }); seg(1 - 0.05, 1, C.soleCol); }
       }
     }
 
-    // skirts and long tops
+    // ---- skirt: a flared block re-shaped every frame so legs only ever leave through the hem ----
+    let hull = null, hullWz = bz;
     if (skirtish) {
-      // The skirt is a flared box re-shaped every frame: its waist is fixed, and its hem
-      // stretches to wrap wherever each leg is at the hem's length. Legs can only leave through the hem.
-      const col = skirtCol;
-      const m = 0.12, top = 0.16, wx = D.tw / 2 + 0.08, wz = D.td / 2 + 0.16;
-      const fz = 0.12 + 0.08 * skirtLen;
+      const m = 0.12, top = 0.16, wx = D.tw / 2 + 0.08, wz = D.td / 2 + 0.16, fz = 0.12 + 0.08 * skirtLen;
       let x0 = -(wx + 0.05), x1 = wx + 0.05, z0 = -(wz + fz), z1 = wz + fz, yb = -skirtLen;
-      for (const [e, px] of [[pose.legL, hx], [pose.legR, -hx]]) {
-        if (!isSteep(e)) continue;   // lifted legs carry their own fabric, so the skirt doesn't stretch to them
-        const R = euler(e);
+      for (const lf of [lfL, lfR]) {
+        if (!steepOf(lf)) continue;   // lifted legs carry their own fabric
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-          const p = add([px, 0, 0], mv(R, [sx * D.lw / 2, -skirtLen, sz * D.lw / 2]));
+          const p = add(lf.t, mv(lf.m, [sx * D.lw / 2, -skirtLen, sz * D.lw / 2]));
           yb = Math.min(yb, p[1]);
           x0 = Math.min(x0, p[0] - m); x1 = Math.max(x1, p[0] + m); z0 = Math.min(z0, p[2] - m); z1 = Math.max(z1, p[2] + m);
         }
       }
-      // never let the hem sink into the ground (sitting, kneeling)
-      if (abs(pose.root[0]) < 0.3 && abs(pose.root[2]) < 0.3) yb = Math.max(yb, -rootY + st.y + 0.04);
+      if (abs(pose.root[0]) < 0.3 && abs(pose.root[2]) < 0.3) yb = Math.max(yb, -rootY + st.y + 0.04);   // never into the ground
+      const tf = standFrame({ m: I3, t: [0, 0, 0] }, [0, 0, 0], pose.torso, D.tw / 2, bz);   // waist moves with the torso
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const q = add(tf.t, mv(tf.m, [sx * wx, top, sz * wz])); x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[2]); }
       const pts = [];
-      for (let i = 0; i < 8; i++) pts.push(i & 2 ? [i & 1 ? wx : -wx, top, i & 4 ? wz : -wz] : [i & 1 ? x1 : x0, yb, i & 4 ? z1 : z0]);
-      box(root, null, null, col, { kind: "skirt", pts, hemY: yb, bias: 0.04, deco: drawSkirt });
+      for (let i = 0; i < 8; i++) pts.push(i & 2 ? add(tf.t, mv(tf.m, [i & 1 ? wx : -wx, top, i & 4 ? wz : -wz])) : [i & 1 ? x1 : x0, yb, i & 4 ? z1 : z0]);
+      hull = box(root, null, null, skirtCol, { kind: "skirt", grp: "skirt", wrap: true, pts, hemY: yb, bias: 0.04, deco: drawSkirt });
+      hullWz = wz;
     }
-    if (look.top === "hoodie") box(torso, [0, D.th - 0.2, -(D.td / 2 + 0.14)], [D.tw * 0.7, 0.55, 0.28], mix(C.topCol, [0, 0, 0], 0.12), { bias: 0.02 });
-    if (look.top === "spacesuit") box(torso, [0, D.th - 0.05, 0], [D.tw * 0.66, 0.2, D.td + 0.12], C.topCol2, { bias: 0.03 });
 
-    // hair
+    // ---- hair, measured so everything worn on the head can sit on its outer surface ----
+    const headStuff = [headPart];
+    const onHead = (j, c, s, col, o) => { const p = box(j, c, s, col, o); headStuff.push(p); return p; };
     const hairCap = hidesHair(look.hat);
-    const H = (c, s, o = {}) => { if (o.top && hairCap) return; box(o.j || neck, c, s, o.col || C.hairCol, { kind: "hair", bias: 0.05 }); };
-    const top = () => H([0, h + 0.06, 0], [w + 0.12, 0.26, d + 0.12], { top: true });
-    const back = (L) => H([0, h - L / 2 + 0.1, -(d / 2 + 0.05)], [w + 0.12, L + 0.2, 0.14]);
-    const sides = (L, th = 0.12, dd = d * 0.8) => { for (const sx of [1, -1]) H([sx * (w / 2 + th / 2 - 0.01), h - L / 2 + 0.1, -d * 0.1], [th, L + 0.2, dd]); };
-    const fringe = (th = 0.26) => H([0, h - th / 2 + 0.03, d / 2 + 0.05], [w + 0.12, th, 0.1], { top: true });
-    const rotH = (pivot, rot, c, s, col, isTop) => { if (isTop && hairCap) return; box(child(neck, pivot, euler(rot)), c, s, col || C.hairCol, { kind: "hair", bias: 0.05 }); };
+    const capTop = hairCap ? h : h + 0.2;   // under a hat, side and back hair stop at the crown
+    const H = (c, s, o = {}) => { if (o.top && hairCap) return; onHead(o.j || neck, c, s, o.col || C.hairCol, { kind: "hair", grp: "hair", bias: 0.05, wrap: !!o.wrap }); };
+    const top = () => H([0, h + 0.06, 0], [w + 0.12, 0.26, d + 0.12], { top: true, wrap: true });
+    const back = L => H([0, (h - L + capTop) / 2, -(d / 2 + 0.06)], [w + 0.12, capTop - (h - L), 0.14]);
+    const sides = (L, tk = 0.12, dd = d * 0.8) => { for (const sx of [1, -1]) H([sx * (w / 2 + tk / 2 - 0.01), (h - L + capTop) / 2, -d * 0.1], [tk, capTop - (h - L), dd]); };
+    const fringe = (tk = 0.26) => H([0, h - tk / 2 + 0.03, d / 2 + 0.05], [w + 0.12, tk, 0.1], { top: true });
+    const rotH = (pivot, rot, c, s, col, isTop, dangle) => { if (isTop && hairCap) return; onHead(child(neck, pivot, euler(rot)), c, s, col || C.hairCol, { kind: "hair", grp: "hair", bias: 0.05, dangle: !!dangle }); };
+    const lowBraids = [], dangles = [];   // hanging hair is placed last, on the outside of any bands and straps
     switch (look.hair) {
-      case "buzz": H([0, h + 0.02, 0], [w + 0.06, 0.1, d + 0.06], { top: true }); back(h * 0.45); break;
+      case "buzz": H([0, h + 0.02, 0], [w + 0.06, 0.1, d + 0.06], { top: true, wrap: true }); back(h * 0.45); break;
       case "short": top(); back(h * 0.55); sides(h * 0.32); fringe(0.16); break;
       case "fringe": top(); back(h * 0.7); sides(h * 0.6); fringe(0.38); break;
       case "spiky": top(); back(h * 0.5); sides(h * 0.3);
@@ -458,99 +539,249 @@
           rotH([x * w, h + 0.12, z * d], [rx, 0, rz], [0, 0.22, 0], [0.3, 0.5, 0.3], null, true);
           rotH([x * w, h + 0.12, z * d], [rx, 0, rz], [0, 0.52, 0], [0.18, 0.14, 0.18], C.hairCol2, true);
         }); break;
-      case "slick": top(); back(h * 0.55); sides(h * 0.3); rotH([0, h + 0.05, d * 0.25], [-0.55, 0, 0], [0, 0.16, 0], [w + 0.08, 0.34, 0.5], null, true); break;
-      case "curly": back(h * 0.6); sides(h * 0.35);
-        for (const [x, z, y] of [[-0.32, -0.3, 0.05], [0.32, -0.3, 0.1], [0, -0.32, 0.12], [-0.34, 0.12, 0.08], [0.34, 0.12, 0.04], [0, 0.18, 0.14], [-0.12, -0.05, 0.22], [0.15, 0.0, 0.2]]) H([x * w, h + y, z * d], [0.5, 0.45, 0.5], { top: true });
+      case "slick": top(); back(h * 0.55); sides(h * 0.3); if (!hairCap) onHead(standFrame(neck, [0, h + 0.19, d * 0.2], [-0.45, 0, 0], (w + 0.08) / 2, 0.25), [0, 0.17, 0], [w + 0.08, 0.34, 0.5], C.hairCol, { kind: "hair", grp: "hair", bias: 0.05 }); break;
+      case "curly": top(); back(h * 0.6); sides(h * 0.35);
+        for (const [x, z, y] of [[-0.3, -0.28, 0], [0.3, -0.28, 0.04], [0, -0.3, 0.06], [-0.3, 0.12, 0.03], [0.3, 0.12, 0], [0, 0.16, 0.08], [-0.1, -0.05, 0.14], [0.13, 0, 0.12]]) H([x * w, h + 0.19 + 0.225 + y, z * d], [0.5, 0.45, 0.5], { top: true });
         break;
-      case "afro": H([0, h + 0.2, -0.04], [w + 0.7, 0.78, d + 0.7], { top: true }); back(h * 0.75); sides(h * 0.4, 0.2); break;
+      case "afro": H([0, h + 0.2, -0.04], [w + 0.7, 0.78, d + 0.7], { top: true, wrap: true }); back(h * 0.75); sides(h * 0.4, 0.2); break;
       case "bob": top(); fringe(0.34); back(h * 0.88); sides(h * 0.82, 0.18, d + 0.1); break;
-      case "long": top(); fringe(0.2); H([0, h - (h + 0.9) / 2 + 0.1, -Math.max(d / 2 + 0.07, D.td / 2 + 0.12)], [w + 0.14, h + 1.1, 0.2]); sides(h * 0.95, 0.14); break;
+      case "long": top(); fringe(0.2); sides(h * 0.95, 0.14); H([0, (0.04 + capTop) / 2, -(d / 2 + 0.11)], [w + 0.14, capTop - 0.04, 0.2]); break;
       case "ponytail": top(); back(h * 0.6); sides(h * 0.4); fringe(0.16);
-        rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35 + 0.08 * sin(t * 3), 0, 0.05 * sin(t * 2)], [0, -0.55, -0.1], [0.42, 1.2, 0.42]);
-        rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35, 0, 0], [0, -0.02, -0.08], [0.48, 0.16, 0.48], C.hairCol2); break;
-      case "bun": top(); back(h * 0.55); sides(h * 0.35); fringe(0.14); H([0, h + 0.38, -0.12], [0.6, 0.5, 0.6], { top: true }); break;
+        dangles.push(() => {
+          const by = h * 0.82, br = Math.max(d / 2, reachN(headStuff, 2, -1, { y: [by - 0.25, by + 0.1], x: [-0.25, 0.25] }));
+          const floor = (look.top === "spacesuit" ? 0.18 : 0) + (has("scarf") ? 0.26 : 0) + 0.03;   // stop above anything around the neck
+          const L = clamp((by - floor) / cos(0.43) - 0.06, 0.4, 1.0), pv = [0, by, -(br + 0.1)];
+          rotH(pv, [0.35 + 0.08 * sin(t * 3), 0, 0.05 * sin(t * 2)], [0, -L / 2 + 0.05, -0.12], [0.42, L, 0.42], null, false, true);
+          rotH(pv, [0.35, 0, 0], [0, -0.02, -0.17], [0.48, 0.16, 0.48], C.hairCol2, false, true);
+        }); break;
+      case "bun": top(); back(h * 0.55); sides(h * 0.35); fringe(0.14); H([0, h + 0.44, -0.12], [0.6, 0.5, 0.6], { top: true }); break;
       case "pigtails": top(); fringe(0.22); back(h * 0.6);
-        for (const sx of [1, -1]) {
-          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * (0.42 + 0.05 * sin(t * 3 + sx))], [0, -0.5, 0], [0.36, 1.0, 0.36]);
-          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * 0.42], [0, -0.02, 0], [0.42, 0.14, 0.42], C.hairCol2);
-        } break;
+        dangles.push(() => {
+          const by = h * 0.74, floor = (look.top === "spacesuit" ? 0.18 : 0) + (has("scarf") ? 0.26 : 0) + 0.03;
+          const L = clamp((by - floor) / cos(0.47) - 0.08, 0.35, 0.85);
+          for (const sx of [1, -1]) {
+            const sr = Math.max(w / 2, reachN(headStuff, 0, sx, { y: [by - 0.3, by + 0.1], z: [-0.4, 0.2] })), pv = [sx * (sr + 0.2), by, -0.1];
+            rotH(pv, [0.15, 0, sx * (0.42 + 0.05 * sin(t * 3 + sx))], [0, -L / 2 + 0.01, 0], [0.36, L, 0.36], null, false, true);
+            rotH(pv, [0.15, 0, sx * 0.42], [0, -0.02, 0], [0.42, 0.14, 0.42], C.hairCol2, false, true);
+          }
+        }); break;
       case "mohawk": H([0, h + 0.02, 0], [w * 0.5, 0.08, d + 0.04], { top: true }); back(h * 0.4);
-        H([0, h + 0.22, 0], [0.32, 0.42, d + 0.14], { top: true }); H([0, h + 0.5, 0], [0.26, 0.16, d + 0.06], { top: true, col: C.hairCol2 }); break;
+        H([0, h + 0.27, 0], [0.32, 0.42, d + 0.14], { top: true }); H([0, h + 0.56, 0], [0.26, 0.16, d + 0.06], { top: true, col: C.hairCol2 }); break;
       case "braids": top(); fringe(0.18); back(h * 0.7);
-        // upper links hug the sides of the head; links below the chin hang in front of the shoulders
-        for (const sx of [1, -1]) for (let i = 0; i < 5; i++) {
-          const y = h * 0.42 - i * 0.34, tip = i === 4;
-          const z = y > 0.15 ? d / 2 - 0.22 : Math.max(d / 2 - 0.22, D.td / 2 + 0.17);
-          H([sx * (w / 2 + 0.14), tip ? y + 0.08 : y, z], tip ? [0.22, 0.16, 0.22] : [0.28, 0.32, 0.28], { col: tip || i % 2 ? C.hairCol2 : C.hairCol });
+        // links beside the head move with the head; links below the chin rest on the chest
+        for (const sx of [1, -1]) {
+          let i = 0;
+          for (let y = h * 0.42; y - 0.16 >= 0.01 && i < 4; y -= 0.34, i++) H([sx * (w / 2 + 0.14), y, d / 2 - 0.22], [0.28, 0.32, 0.28], { col: i % 2 ? C.hairCol2 : C.hairCol });
+          for (let k = 0; i < 5; i++, k++) {
+            const tip = i === 4, s = tip ? [0.22, 0.16, 0.22] : [0.28, 0.32, 0.28];
+            lowBraids.push(box(torso, [sx * (w / 2 + 0.14), th - 0.18 - k * 0.34 + (tip ? 0.08 : 0), bz + 0.15], s, tip || i % 2 ? C.hairCol2 : C.hairCol, { kind: "hair", grp: "braid", bias: 0.05 }));
+          }
         }
         break;
     }
+    const hairList = headStuff.filter(p => p.kind === "hair");
+    const reachN = (list, axis, sign, band) => reach(list, axis, sign, band, neck);
+    // smallest block around everything on the head inside a height band
+    const wrapAt = (y0, y1, px, pz = px) => {
+      const band = { y: [y0, y1] }, under = headStuff.filter(q => !q.dangle);
+      const xp = Math.max(w / 2, reachN(under, 0, 1, band)), xn = Math.max(w / 2, reachN(under, 0, -1, band));
+      const zp = Math.max(d / 2, reachN(under, 2, 1, band)), zn = Math.max(d / 2, reachN(under, 2, -1, band));
+      return { cx: (xp - xn) / 2, cz: (zp - zn) / 2, sx: xp + xn + 2 * px, sz: zp + zn + 2 * pz, x1: xp + px, x0: -(xn + px), z1: zp + pz, z0: -(zn + pz) };
+    };
+    const topAt = (x0, x1, z0, z1) => Math.max(h, reachN(headStuff, 1, 1, { x: [x0, x1], z: [z0, z1] }));
 
-    // facial hair boxes
-    if (look.facial === "beard") box(neck, [0, h * 0.16, d / 2 + 0.06], [w * 0.86, h * 0.32, 0.16], C.hairCol, { kind: "hair", bias: 0.05 });
+    // ---- facial hair & goggles ----
+    if (look.facial === "beard") onHead(neck, [0, h * 0.16, d / 2 + 0.08], [w * 0.86, h * 0.32, 0.16], C.hairCol, { kind: "hair", grp: "hair", bias: 0.05 });
     if (look.facial === "fullbeard") {
-      box(neck, [0, h * 0.14, d / 2 + 0.07], [w + 0.06, h * 0.34, 0.18], C.hairCol, { kind: "hair", bias: 0.05 });
-      for (const sx of [1, -1]) box(neck, [sx * (w / 2 + 0.05), h * 0.25, 0.05], [0.12, h * 0.5, d * 0.75], C.hairCol, { kind: "hair", bias: 0.05 });
-      box(neck, [0, -0.1, d / 2 + 0.02], [w * 0.7, 0.25, 0.22], C.hairCol, { kind: "hair", bias: 0.05 });
+      const sx = Math.max(w / 2, reachN(hairList, 0, 1, { y: [0, h * 0.5], z: [-0.4 * d, 0.45 * d] }), reachN(hairList, 0, -1, { y: [0, h * 0.5], z: [-0.4 * d, 0.45 * d] }));
+      onHead(neck, [0, h * 0.17, d / 2 + 0.09], [2 * sx, h * 0.34, 0.18], C.hairCol, { kind: "hair", grp: "hair", bias: 0.05 });
+      for (const s of [1, -1]) onHead(neck, [s * (sx + 0.06), h * 0.25, 0.05], [0.12, h * 0.5, d * 0.75], C.hairCol, { kind: "hair", grp: "hair", bias: 0.05 });
     }
-    if (look.glasses === "goggles") box(neck, [0, h * 0.58, 0], [w + 0.1, h * 0.27, d + 0.1], C.glassCol, { kind: "goggles", bias: 0.07, deco: P => P.face === "front" && [0.3, 0.7].forEach(u => { P.ell(u, 0.5, 0.17, 0.36, [120, 200, 240]); P.ell(u - 0.04, 0.38, 0.05, 0.1, WHITE, 1, 0.7); }) });
+    if (look.glasses === "goggles") {
+      const g = wrapAt(h * 0.45, h * 0.72, 0.05);
+      onHead(neck, [g.cx, h * 0.585, g.cz], [g.sx, h * 0.27, g.sz], C.glassCol, { kind: "goggles", grp: "goggles", wrap: true, bias: 0.07, deco: P => P.face === "front" && [0.3, 0.7].forEach(u => { P.ell(u, 0.5, 0.17, 0.36, [120, 200, 240]); P.ell(u - 0.04, 0.38, 0.05, 0.1, WHITE, 1, 0.7); }) });
+    }
 
-    // headwear
-    const hy = hairCap || ["none", "buzz"].includes(look.hair) ? h : h + 0.16;
-    const HT = (c, s, col, o = {}) => box(o.j || neck, c, s, col || C.hatCol, Object.assign({ kind: "hat", bias: 0.08 }, o));
-    const rotHat = (pivot, rot, c, s, col, o) => HT(c, s, col, Object.assign({ j: child(neck, pivot, euler(rot)) }, o));
+    // ---- headwear, sized to wrap whatever is under it ----
+    const HT = (j, c, s, col, o = {}) => onHead(j, c, s, col || C.hatCol, Object.assign({ kind: "hat", grp: "hat", bias: 0.08 }, o));
+    const grow = (a, b, m) => ({ cx: (Math.max(a.x1, b.x1 + m) + Math.min(a.x0, b.x0 - m)) / 2, cz: (Math.max(a.z1, b.z1 + m) + Math.min(a.z0, b.z0 - m)) / 2, x1: Math.max(a.x1, b.x1 + m), x0: Math.min(a.x0, b.x0 - m), z1: Math.max(a.z1, b.z1 + m), z0: Math.min(a.z0, b.z0 - m), get sx() { return this.x1 - this.x0; }, get sz() { return this.z1 - this.z0; } });
+    const ring4 = (W0, y0, y1, col, o) => HT(neck, [W0.cx, (y0 + y1) / 2, W0.cz], [W0.sx, y1 - y0, W0.sz], col, Object.assign({ wrap: true }, o));
     switch (look.hat) {
-      case "cap": HT([0, h + 0.16, -0.02], [w + 0.16, 0.36, d + 0.16], null, { deco: P => P.face === "front" && P.ell(0.5, 0.5, 0.13, 0.28, C.hatCol2) }); HT([0, h + 0.02, d / 2 + 0.33], [w - 0.06, 0.08, 0.68]); break;
-      case "backcap": HT([0, h + 0.16, 0.02], [w + 0.16, 0.36, d + 0.16]); HT([0, h + 0.02, -(d / 2 + 0.33)], [w - 0.06, 0.08, 0.68]); break;
-      case "beanie": HT([0, h + 0.12, 0], [w + 0.18, 0.64, d + 0.18]); HT([0, h - 0.14, 0], [w + 0.24, 0.2, d + 0.24], C.hatCol2); HT([0, h + 0.56, 0], [0.36, 0.36, 0.36], C.hatCol2); break;
-      case "tophat": HT([0, h + 0.05, 0], [w + 0.7, 0.1, d + 0.7]); HT([0, h + 0.64, 0], [w - 0.04, 1.08, d - 0.04]); HT([0, h + 0.26, 0], [w + 0.01, 0.22, d + 0.01], C.hatCol2); break;
-      case "cowboy": HT([0, h + 0.08, 0], [w + 1.25, 0.1, d + 1.0]); for (const sx of [1, -1]) HT([sx * (w / 2 + 0.6), h + 0.2, 0], [0.12, 0.24, d + 1.0]);
-        HT([0, h + 0.44, 0], [w + 0.06, 0.64, d - 0.04]); HT([0, h + 0.2, 0], [w + 0.1, 0.16, d], C.hatCol2); break;
-      case "crown": HT([0, h + 0.14, 0], [w + 0.1, 0.32, d + 0.1], null, { deco: P => P.side && P.poly([[0.5, 0.15], [0.62, 0.5], [0.5, 0.85], [0.38, 0.5]], C.hatCol2) });
-        for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 1], [0, -1], [1, 0], [-1, 0]]) HT([x * (w / 2 - 0.05), h + 0.42, z * (d / 2 - 0.05)], [0.2, 0.28, 0.2]); break;
-      case "wizard": HT([0, h + 0.05, 0], [w + 0.85, 0.08, d + 0.85]);
-        [1, 0.76, 0.54, 0.34, 0.16].forEach((s, i) => HT([0, h + 0.28 + i * 0.36, -0.07 * i * i], [w * s + 0.05, 0.38, d * s + 0.05], null, i === 0 ? { deco: P => P.face === "front" && P.poly(starPts(0.5, 0.5, 0.28, 0.45), C.hatCol2) } : {}));
+      case "cap": { const W0 = wrapAt(h - 0.02, h + 0.34, 0.08); ring4(W0, h - 0.02, h + 0.34, null, { deco: P => P.face === "front" && P.ell(0.5, 0.5, 0.13, 0.28, C.hatCol2) }); HT(neck, [W0.cx, h + 0.02, W0.z1 + 0.32], [Math.min(W0.sx, w + 0.1) - 0.1, 0.08, 0.64]); break; }
+      case "backcap": { const W0 = wrapAt(h - 0.02, h + 0.34, 0.08); ring4(W0, h - 0.02, h + 0.34); HT(neck, [W0.cx, h + 0.02, W0.z0 - 0.32], [Math.min(W0.sx, w + 0.1) - 0.1, 0.08, 0.64]); break; }
+      case "beanie": { const W0 = wrapAt(h - 0.2, h + 0.44, 0.09); ring4(W0, h - 0.2, h + 0.44); const B = grow(wrapAt(h - 0.24, h - 0.04, 0.12), W0, 0.03); ring4(B, h - 0.24, h - 0.04, C.hatCol2); HT(neck, [W0.cx, h + 0.62, W0.cz], [0.36, 0.36, 0.36], C.hatCol2); break; }
+      case "tophat": { const W0 = wrapAt(h, h + 0.1, 0.33); ring4(W0, h, h + 0.1); HT(neck, [W0.cx, h + 0.64, W0.cz], [w - 0.04, 1.08, d - 0.04]); HT(neck, [W0.cx, h + 0.26, W0.cz], [w + 0.01, 0.22, d + 0.01], C.hatCol2, { wrap: true }); break; }
+      case "cowboy": { const W0 = wrapAt(h + 0.03, h + 0.13, 0.55, 0.45); ring4(W0, h + 0.03, h + 0.13); for (const x of [W0.x0 + 0.06, W0.x1 - 0.06]) HT(neck, [x, h + 0.23, W0.cz], [0.12, 0.2, W0.sz]);
+        HT(neck, [W0.cx, h + 0.44, W0.cz], [w + 0.06, 0.62, d - 0.04]); HT(neck, [W0.cx, h + 0.2, W0.cz], [w + 0.1, 0.14, d], C.hatCol2, { wrap: true }); break; }
+      case "crown": { const W0 = wrapAt(h - 0.02, h + 0.3, 0.05); ring4(W0, h - 0.02, h + 0.3, null, { deco: P => P.side && P.poly([[0.5, 0.15], [0.62, 0.5], [0.5, 0.85], [0.38, 0.5]], C.hatCol2) });
+        for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 1], [0, -1], [1, 0], [-1, 0]]) HT(neck, [W0.cx + x * (W0.sx / 2 - 0.1), h + 0.44, W0.cz + z * (W0.sz / 2 - 0.1)], [0.2, 0.28, 0.2]); break; }
+      case "wizard": { const W0 = wrapAt(h + 0.01, h + 0.09, 0.42); ring4(W0, h + 0.01, h + 0.09);
+        [1, 0.76, 0.54, 0.34, 0.16].forEach((s, i) => HT(neck, [W0.cx, h + 0.09 + 0.18 + i * 0.36, W0.cz - 0.07 * i * i], [w * s + 0.05, 0.36, d * s + 0.05], null, i === 0 ? { deco: P => P.face === "front" && P.poly(starPts(0.5, 0.5, 0.28, 0.45), C.hatCol2) } : {}));
+        break; }
+      case "chef": { const W0 = wrapAt(h - 0.07, h + 0.27, 0.04); ring4(W0, h - 0.07, h + 0.27); HT(neck, [W0.cx, h + 0.58, W0.cz], [W0.sx + 0.37, 0.62, W0.sz + 0.37]); break; }
+      case "party": { const pj = standFrame(neck, [0, h, 0], [0, 0, 0.15], w * 0.46, d * 0.46); [0.92, 0.68, 0.45, 0.24].forEach((s, i) => HT(pj, [0, 0.165 + i * 0.33, 0], [w * s, 0.33, d * s], i % 2 ? C.hatCol2 : C.hatCol)); HT(pj, [0, 1.47, 0], [0.3, 0.3, 0.3], C.hatCol2); break; }
+      case "headphones": {
+        const yTop = topAt(-w / 2 - 0.5, w / 2 + 0.5, -0.15, 0.15), cupY = h * 0.55;
+        const band = { y: [cupY - 0.3, yTop], z: [-0.31, 0.31] };
+        const xp = Math.max(w / 2, reachN(headStuff, 0, 1, band)), xn = Math.max(w / 2, reachN(headStuff, 0, -1, band));
+        HT(neck, [(xp - xn) / 2, yTop + 0.07, 0], [xp + xn + 0.52, 0.14, 0.3]);
+        for (const [s, x] of [[1, xp], [-1, xn]]) { HT(neck, [s * (x + 0.13), cupY, 0], [0.26, 0.6, 0.62], C.hatCol2); if (yTop > cupY + 0.3) HT(neck, [s * (x + 0.06), (cupY + 0.3 + yTop) / 2, 0], [0.1, yTop - cupY - 0.3, 0.18]); }
         break;
-      case "chef": HT([0, h + 0.1, 0], [w + 0.08, 0.34, d + 0.08]); HT([0, h + 0.56, 0], [w + 0.45, 0.62, d + 0.45]); break;
-      case "party": { const pj = child(neck, [0, h, 0], rotZ(0.15)); [0.92, 0.68, 0.45, 0.24].forEach((s, i) => HT([0, 0.17 + i * 0.32, 0], [w * s, 0.33, d * s], i % 2 ? C.hatCol2 : C.hatCol, { j: pj })); HT([0, 1.45, 0], [0.3, 0.3, 0.3], C.hatCol2, { j: pj }); break; }
-      case "headphones": HT([0, hy + 0.06, 0], [w + 0.28, 0.14, 0.3]); for (const sx of [1, -1]) { HT([sx * (w / 2 + 0.13), h * 0.55, 0], [0.26, 0.6, 0.62], C.hatCol2); HT([sx * (w / 2 + 0.1), h * 0.95, 0], [0.1, h * 0.5, 0.18]); } break;
-      case "bandana": HT([0, h * 0.87, 0], [w + 0.1, 0.24, d + 0.1], null, { deco: P => P.side && [0.2, 0.5, 0.8].forEach(u => P.ell(u, 0.5, 0.05, 0.18, C.hatCol2)) });
-        HT([0, h * 0.87, -(d / 2 + 0.14)], [0.3, 0.3, 0.2]); rotHat([0.05, h * 0.82, -(d / 2 + 0.2)], [0.5, 0, 0.3], [0, -0.3, 0], [0.18, 0.6, 0.08]); break;
-      case "helmet": box(neck, [0, h / 2 + 0.06, 0.02], [w + 0.36, h + 0.42, d + 0.36], [200, 230, 255], { kind: "glass", bias: 0.3, alpha: 0.26 });
-        HT([0, -0.04, 0.02], [w + 0.44, 0.16, d + 0.44], [230, 232, 238]); break;
-      case "catears": for (const sx of [1, -1]) rotHat([sx * w * 0.3, hy - 0.02, 0], [0, 0, sx * -0.15], [0, 0.18, 0], [0.36, 0.38, 0.14], null, { deco: P => P.face === "front" && P.poly([[0.5, 0.2], [0.8, 0.95], [0.2, 0.95]], [255, 150, 170]) }); break;
-      case "bunny": for (const sx of [1, -1]) rotHat([sx * w * 0.22, hy - 0.02, 0], [-0.1, 0, sx * -(0.12 + 0.05 * sin(t * 2 + sx))], [0, 0.45, 0], [0.24, 0.9, 0.12], null, { deco: P => P.face === "front" && P.quad(0.3, 0.7, 0.1, 0.9, [255, 170, 190]) }); break;
-      case "horns": for (const sx of [1, -1]) { rotHat([sx * w * 0.3, hy - 0.04, 0.12], [0, 0, sx * -0.4], [0, 0.2, 0], [0.22, 0.42, 0.22]); rotHat([sx * w * 0.3, hy - 0.04, 0.12], [0, 0, sx * -0.4], [0, 0.48, 0], [0.12, 0.16, 0.12], C.hatCol2); } break;
-      case "halo": { const yy = h + 0.5 + 0.06 * sin(t * 2), r = Math.max(w, d) * 0.42; for (const s of [1, -1]) { HT([0, yy, s * r], [r * 2 + 0.1, 0.08, 0.1]); HT([s * r, yy, 0], [0.1, 0.08, r * 2 + 0.1]); } break; }
-      case "antenna": { const aj = child(neck, [0, hy, 0], rotZ(0.12 * sin(t * 3))); HT([0, 0.35, 0], [0.08, 0.7, 0.08], [80, 84, 96], { j: aj }); HT([0, 0.78, 0], [0.26, 0.26, 0.26], C.hatCol2, { j: aj }); break; }
-      case "viking": HT([0, h + 0.12, 0], [w + 0.16, 0.5, d + 0.16]); HT([0, h - 0.08, 0], [w + 0.22, 0.14, d + 0.22], C.hatCol2);
-        for (const sx of [1, -1]) { rotHat([sx * (w / 2 + 0.06), h + 0.18, 0], [0, 0, sx * -1.0], [0, 0.3, 0], [0.22, 0.6, 0.22], [238, 230, 210]); rotHat([sx * (w / 2 + 0.06), h + 0.18, 0], [0, 0, sx * -0.75], [0, 0.66, 0], [0.13, 0.22, 0.13], [238, 230, 210]); }
-        break;
+      }
+      case "bandana": { const W0 = wrapAt(h * 0.87 - 0.12, h * 0.87 + 0.12, 0.05); ring4(W0, h * 0.87 - 0.12, h * 0.87 + 0.12, null, { deco: P => P.side && [0.2, 0.5, 0.8].forEach(u => P.ell(u, 0.5, 0.05, 0.18, C.hatCol2)) });
+        HT(neck, [W0.cx, h * 0.87, W0.z0 - 0.1], [0.3, 0.3, 0.2]); HT(child(neck, [W0.cx + 0.05, h * 0.87 - 0.15, W0.z0 - 0.16], euler([0.5, 0, 0.3])), [0, -0.3, -0.02], [0.18, 0.6, 0.06]); break; }
+      case "helmet": {
+        const W0 = wrapAt(0, 9, 0.16), yTop = topAt(-9, 9, -9, 9);
+        onHead(neck, [W0.cx, (yTop + 0.16) / 2, W0.cz], [W0.sx, yTop + 0.16, W0.sz], [200, 230, 255], { kind: "glass", grp: "hat", wrap: true, bias: 0.3, alpha: 0.26 });
+        HT(neck, [W0.cx, 0.07, W0.cz], [W0.sx + 0.08, 0.14, W0.sz + 0.08], [230, 232, 238], { wrap: true }); break;
+      }
+      case "catears": for (const s of [1, -1]) { const bx = s * w * 0.3, yb = topAt(bx - 0.2, bx + 0.2, -0.1, 0.1); HT(standFrame(neck, [bx, yb, 0], [0, 0, -s * 0.15], 0.18, 0.07), [0, 0.19, 0], [0.36, 0.38, 0.14], null, { deco: P => P.face === "front" && P.poly([[0.5, 0.2], [0.8, 0.95], [0.2, 0.95]], [255, 150, 170]) }); } break;
+      case "bunny": for (const s of [1, -1]) { const bx = s * w * 0.22, yb = topAt(bx - 0.14, bx + 0.14, -0.08, 0.08); HT(standFrame(neck, [bx, yb, 0], [-0.1, 0, -s * (0.12 + 0.05 * sin(t * 2 + s))], 0.12, 0.06), [0, 0.45, 0], [0.24, 0.9, 0.12], null, { deco: P => P.face === "front" && P.quad(0.3, 0.7, 0.1, 0.9, [255, 170, 190]) }); } break;
+      case "horns": for (const s of [1, -1]) { const bx = s * w * 0.3, yb = topAt(bx - 0.13, bx + 0.13, 0.0, 0.24); const hj = standFrame(neck, [bx, yb, 0.12], [0, 0, -s * 0.4], 0.11, 0.11); HT(hj, [0, 0.21, 0], [0.22, 0.42, 0.22]); HT(hj, [0, 0.5, 0], [0.12, 0.16, 0.12], C.hatCol2); } break;
+      case "halo": { const yy = topAt(-9, 9, -9, 9) + 0.42 + 0.06 * sin(t * 2), r = Math.max(w, d) * 0.42; for (const s of [1, -1]) { HT(neck, [0, yy, s * r], [r * 2 + 0.1, 0.08, 0.1]); HT(neck, [s * r, yy, 0], [0.1, 0.08, r * 2 - 0.1]); } break; }
+      case "antenna": { const aj = standFrame(neck, [0, topAt(-0.1, 0.1, -0.1, 0.1), 0], [0, 0, 0.12 * sin(t * 3)], 0.04, 0.04); HT(aj, [0, 0.35, 0], [0.08, 0.7, 0.08], [80, 84, 96]); HT(aj, [0, 0.83, 0], [0.26, 0.26, 0.26], C.hatCol2); break; }
+      case "viking": { const W0 = wrapAt(h - 0.13, h + 0.37, 0.08); ring4(W0, h - 0.13, h + 0.37); const R = grow(wrapAt(h - 0.15, h - 0.01, 0.11), W0, 0.03); ring4(R, h - 0.15, h - 0.01, C.hatCol2);
+        for (const s of [1, -1]) { const hj = standFrame(neck, [s * ((s > 0 ? W0.x1 : -W0.x0) + 0.12), h + 0.12, W0.cz], [0, 0, -s * 1.0], 0.11, 0.11); HT(hj, [0, 0.3, 0], [0.22, 0.6, 0.22], [238, 230, 210]); HT(hj, [0, 0.69, 0], [0.13, 0.18, 0.13], [238, 230, 210]); }
+        break; }
+    }
+    if (has("earrings")) {
+      const ey = look.hat === "headphones" ? Math.min(h * 0.32, h * 0.55 - 0.3 - 0.1) : h * 0.32;
+      for (const s of [1, -1]) { const x = Math.max(w / 2, reachN(headStuff, 0, s, { y: [ey - 0.09, ey + 0.09], z: [-0.05, 0.15] })); onHead(neck, [s * (x + 0.05), ey, 0.05], [0.08, 0.18, 0.08], GOLD, { grp: "jewel", bias: 0.06 }); }
     }
 
-    // accessories
-    const has = k => look.acc.includes(k);
-    const speedK = clamp(st.speed / 16 + (st.y > 0 ? 0.4 : 0), 0, 1);
-    if (has("backpack")) { box(torso, [0, D.th * 0.5, -(D.td / 2 + 0.3)], [D.tw * 0.72, D.th * 0.75, 0.6], C.accCol, { bias: 0.01, deco: P => P.face === "back" && P.quad(0.15, 0.85, 0.5, 0.9, C.accCol, 0.8) }); }
-    if (has("jetpack")) {
-      for (const sx of [1, -1]) box(torso, [sx * D.tw * 0.2, D.th * 0.5, -(D.td / 2 + 0.3)], [D.tw * 0.32, D.th * 0.8, 0.55], C.accCol, { bias: 0.01, deco: P => P.face === "back" && P.quad(0.2, 0.8, 0.1, 0.25, [226, 85, 74]) });
-      if (st.y > 0 || st.active === "meditate") for (const sx of [1, -1]) extras.push({ kind: "flame", j: torso, at: [sx * D.tw * 0.2, D.th * 0.1, -(D.td / 2 + 0.3)] });
+    for (const f of dangles) f();
+
+    // ---- rings around the neck: space-suit collar and scarf, wide enough to never cut the head ----
+    const neckRing = (y0, y1, col, o) => {
+      let half = Math.max(w, d) * 0.72;
+      for (const ax of [0, 2]) for (const s of [1, -1]) half = Math.max(half, reach(headStuff.filter(q => !q.dangle), ax, s, { y: [y0, y1] }, torso) + 0.08);
+      return box(torso, [0, (y0 + y1) / 2, 0], [2 * half, y1 - y0, 2 * half], col, Object.assign({ grp: "ring", wrap: true, bias: 0.03 }, o));
+    };
+    const rings = [];
+    let ringTop = th;
+    if (look.top === "spacesuit") { rings.push(neckRing(th, th + 0.18, C.topCol2)); ringTop = th + 0.18; }
+    let scarfEnd = null;
+    if (has("scarf")) {
+      rings.push(neckRing(ringTop, ringTop + 0.26, C.accCol, { deco: P => P.side && P.quad(0, 1, 0.4, 0.6, WHITE, 0.95, 0.5) }));
+      scarfEnd = box(torso, [-D.tw * 0.18, th - 0.55, bz + 0.05], [0.36, 1.0, 0.1], C.accCol, { grp: "scarf", bias: 0.03, deco: P => P.face === "front" && [0.25, 0.55].forEach(v => P.quad(0, 1, v, v + 0.1, WHITE, 0.95, 0.5)) });
     }
-    if (has("guitar")) { const gj = child(torso, [0, D.th * 0.45, -(D.td / 2 + 0.2)], rotZ(0.6)); box(gj, [0, -0.35, 0], [1.15, 1.05, 0.3], C.accCol, { deco: P => P.face === "back" && P.ell(0.5, 0.45, 0.16, 0.16, INK) }); box(gj, [0, 0.85, 0], [0.24, 1.5, 0.16], [120, 80, 52]); box(gj, [0, 1.65, 0], [0.34, 0.3, 0.18], [60, 40, 30]); }
-    if (has("cape")) { const ang = 0.08 + 0.55 * speedK + 0.05 * sin(t * (3 + 6 * speedK)); const cj = child(torso, [0, D.th - 0.05, -(D.td / 2 + 0.06)], rotX(ang)); const L = D.th + D.lh * 0.7; box(cj, [0, -L / 2, -0.04], [D.tw + 0.15, L, 0.08], C.accCol, { bias: 0.0 }); }
-    if (has("wings")) { const flap = 0.25 + 0.25 * sin(t * (st.y > 0 || st.emote ? 10 : 2)); for (const sx of [1, -1]) { const wj = child(torso, [sx * 0.35, D.th * 0.7, -(D.td / 2 + 0.08)], euler([0, sx * (0.55 + flap), 0])); box(wj, [sx * 0.95, 0.15, 0], [1.9, 1.3, 0.08], C.accCol); box(wj, [sx * 1.25, -0.6, 0], [1.1, 0.5, 0.08], mix(C.accCol, [0, 0, 0], 0.08)); } }
-    if (has("tail")) { const tj = child(root, [0, 0.1, -(D.td / 2)], euler([0.55 + 0.1 * sin(t * 2), 0.45 * sin(t * 5), 0])); box(tj, [0, 0, -0.65], [0.24, 0.24, 1.3], C.accCol); box(tj, [0, 0, -1.4], [0.3, 0.3, 0.3], mix(C.accCol, WHITE, 0.3)); }
-    if (has("scarf")) { box(torso, [0, D.th - 0.12, 0], [D.tw * 0.62, 0.38, D.td + 0.14], C.accCol, { bias: 0.03, deco: P => P.side && P.quad(0, 1, 0.4, 0.6, WHITE, 0.95, 0.5) }); box(torso, [-D.tw * 0.18, D.th - 0.7, D.td / 2 + 0.11], [0.36, 1.0, 0.1], C.accCol, { bias: 0.03, deco: P => P.face === "front" && [0.25, 0.55].forEach(v => P.quad(0, 1, v, v + 0.1, WHITE, 0.95, 0.5)) }); }
-    if (has("earrings")) for (const sx of [1, -1]) box(neck, [sx * (w / 2 + 0.05), h * 0.32, 0.05], [0.08, 0.18, 0.08], GOLD, { bias: 0.06 });
-    if (has("satchel")) box(root, [-(D.tw / 2 + 0.17), 0.2, 0.1], [0.3, 0.75, 0.95], C.accCol, { bias: 0.02, deco: P => P.side && P.quad(0, 1, 0, 0.35, C.accCol, 0.85) });
+
+    // ---- the back, stacked outward: hood, hair, pack, cape, wings ----
+    let stack = 0;
+    const backParts = [];
+    if (look.top === "hoodie") { backParts.push(box(torso, [0, th - 0.275, -(bz + 0.14)], [D.tw * 0.7, 0.55, 0.28], mix(C.topCol, [0, 0, 0], 0.12), { grp: "back", bias: 0.02 })); stack = 0.29; }
+    if (look.hair === "long") { backParts.push(box(torso, [0, th - 0.5, -(bz + stack + 0.1)], [w + 0.14, 1.0, 0.2], C.hairCol, { kind: "hair", grp: "back", bias: 0.05 })); stack += 0.21; }
+    const z0 = bz + stack;
+    if (has("backpack")) { backParts.push(box(torso, [0, th * 0.62, -(z0 + 0.3)], [D.tw * 0.72, th * 0.66, 0.6], C.accCol, { grp: "back", bias: 0.01, deco: P => P.face === "back" && P.quad(0.15, 0.85, 0.5, 0.9, C.accCol, 0.8) })); stack += 0.61; }
+    if (has("jetpack")) {
+      for (const sx of [1, -1]) backParts.push(box(torso, [sx * D.tw * 0.2, th * 0.65, -(z0 + 0.275)], [D.tw * 0.32, th * 0.6, 0.55], C.accCol, { grp: "back", bias: 0.01, deco: P => P.face === "back" && P.quad(0.2, 0.8, 0.1, 0.25, [226, 85, 74]) }));
+      if (st.y > 0 || st.active === "meditate") for (const sx of [1, -1]) extras.push({ kind: "flame", j: torso, at: [sx * D.tw * 0.2, th * 0.35, -(z0 + 0.275)] });
+      stack += 0.56;
+    }
+    if (has("guitar")) {
+      const k = th / 2, py = 0.18 + 0.91 * k;
+      const Ln = clamp((th - 0.14 - py) / 0.765 - 0.175 * k - 0.26, 0.3, 1.0);
+      const gj = child(torso, [0, py, -(z0 + 0.16)], rotZ(0.7));
+      const gp = [box(gj, [0, -0.3 * k, 0], [1.0 * k, 0.95 * k, 0.3], C.accCol, { grp: "back", deco: P => P.face === "back" && P.ell(0.5, 0.45, 0.16, 0.16, INK) }), box(gj, [0, 0.175 * k + Ln / 2, 0], [0.22, Ln, 0.16], [120, 80, 52], { grp: "back" }), box(gj, [0, 0.175 * k + Ln + 0.13, 0], [0.32, 0.26, 0.18], [60, 40, 30], { grp: "back" })];
+      pushFrame(gj, gp, [...headStuff, ...rings, ...(hull ? [hull] : [])], 0.5);
+      backParts.push(...gp);
+      stack = Math.max(...gp.map(q => -boundsIn(torso, q).lo[2])) - bz + 0.01;
+    }
+    let capeZ = 0, capeAng = 0, cape = null;
+    if (has("cape")) {
+      // the cape hangs behind everything and swings out just enough to clear legs and skirt
+      const zp = bz + stack + 0.05, L = th + D.lh * 0.7, speedK = clamp(st.speed / 16 + (st.y > 0 ? 0.4 : 0), 0, 1);
+      let need = 0;
+      for (const p of [...legParts, ...(hull ? [hull] : [])]) for (const q of cornersOf(p)) {
+        const l = toLocal(torso, q), drop = th - l[1];
+        if (drop > 0.05 && drop < L) need = Math.max(need, (-zp + 0.08 - l[2]) / drop);
+      }
+      capeAng = Math.max(0.08 + 0.55 * speedK + 0.05 * sin(t * (3 + 6 * speedK)), Math.atan(need));
+      capeZ = zp;
+      cape = box(child(torso, [0, th, -zp], rotX(capeAng)), [0, -L / 2, -0.04], [D.tw + 0.15, L, 0.08], C.accCol, { grp: "cape" });
+    }
+    let wingParts = [];
+    if (has("wings")) {
+      const wy = th * 0.7;
+      let wz = Math.max(bz + stack + 0.06, reach([...headStuff, ...rings], 2, -1, { y: [th, th + 1.2] }, torso) + 0.08);
+      if (cape) wz = Math.max(wz, capeZ + (th - wy) * Math.tan(capeAng) + 0.18);
+      const flap = 0.25 + 0.25 * sin(t * (st.y > 0 || st.emote ? 10 : 2));
+      for (const sx of [1, -1]) {
+        const wj = child(torso, [sx * 0.35, wy, -wz], euler([0, sx * (0.55 + flap), 0]));
+        wingParts.push(box(wj, [sx * 0.95, 0.15, -0.05], [1.9, 1.3, 0.08], C.accCol, { grp: "wings" }), box(wj, [sx * 1.25, -0.6, -0.05], [1.1, 0.5, 0.08], mix(C.accCol, [0, 0, 0], 0.08), { grp: "wings" }));
+      }
+    }
+    if (has("tail")) {
+      const backLow = backParts.length ? Math.min(...backParts.map(q => boundsIn(torso, q).lo[1])) : 9;
+      const ta = Math.min(0.4 + 0.05 * sin(t * 2), Math.asin(clamp((backLow - 0.31) / 1.6, -0.05, 1)));
+      const tj = child(root, [0, 0.13, -((skirtish ? hullWz + 0.02 : bz) + 0.13 * Math.abs(sin(ta)) + 0.01)], euler([ta, 0.45 * sin(t * 5), 0]));
+      box(tj, [0, 0, -0.65], [0.24, 0.24, 1.3], C.accCol, { grp: "tail" }); box(tj, [0, 0, -1.45], [0.3, 0.3, 0.3], mix(C.accCol, WHITE, 0.3), { grp: "tail" });
+    }
+    if (has("satchel")) {
+      const sj = { m: root.m, t: add(root.t, mv(root.m, [-(D.tw / 2 + 0.2), -0.42, 0.1])) };
+      const sp = box(sj, [0, 0, 0], [0.3, 0.7, 0.95], C.accCol, { grp: "satchel", bias: 0.02, deco: P => P.side && P.quad(0, 1, 0, 0.35, C.accCol, 0.85) });
+      pushFrame(sj, [sp], [...legParts, ...(hull ? [hull] : [])], 1.6);
+    }
+
+    // ---- arms: hung at the shoulders, then pushed out of anything they would cut into ----
+    const shY = th - D.aw * 0.5, shX = D.tw / 2 + D.aw / 2, armOut = skirtish ? 0.1 : 0;
+    const armProxy = j => ({ j, c: [0, D.aw * 0.5 - D.ah / 2, 0], s: [D.aw, D.ah, D.aw] });
+    const armFrame = (side, e, fwd, out) => child(torso, [side * shX, shY, 0], euler([e[0] - fwd, e[1], e[2] + side * (armOut + out)]));
+    // candidate adjustments, smallest first: swing further forward and/or a little outward
+    const TRIES = []; for (const fwd of [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.3]) for (const out of [0, 0.15, 0.3, 0.5]) if (fwd || out) TRIES.push([fwd, out]);
+    TRIES.sort((a, b) => a[0] + a[1] - b[0] - b[1]);
+    const placeArm = (side, e, obs) => {
+      const obsP = obs.map(polyOf), depth = f => { const A = polyOf(armProxy(f)); let m = 0; for (const o of obsP) m = Math.max(m, sat(A, o).depth); return m; };
+      let f = armFrame(side, e, 0, 0), dep = depth(f);
+      if (dep > 0.03) for (const [fwd, out] of TRIES) { const g = armFrame(side, e, fwd, out), dg = depth(g); if (dg < dep - 0.005) { f = g; dep = dg; } if (dg <= 0.004) break; }
+      pushFrame(f, [armProxy(f)], obs, 1.0);
+      return f;
+    };
+    const solid = parts.filter(p => !p.alpha);
+    const shL = placeArm(1, pose.armL, solid);
+    const shR = placeArm(-1, pose.armR, [...solid, armProxy(shL)]);
+    const sleeve = { tee: 0.42, polo: 0.42, jersey: 0.4, tank: 0, dress: 0.22, overalls: 0.42 }[look.top] ?? 0.84;
+    const armTop = D.aw * 0.5;
+    for (const [j, side] of [[shL, 1], [shR, -1]]) {
+      const grp = side > 0 ? "armL" : "armR";
+      const seg = (v0, v1, col, o = {}) => box(j, [0, armTop - (v0 + v1) / 2 * D.ah, 0], [D.aw + (o.inf || 0), (v1 - v0) * D.ah, D.aw + (o.inf || 0)], col, Object.assign({ kind: "arm", side, grp }, o));
+      const hand = look.top === "spacesuit" ? C.topCol2 : C.skin;
+      if (sleeve > 0) seg(0, sleeve, C.topCol, { deco: look.top === "jersey" ? (P) => P.side && P.quad(0, 1, 0.88, 1, C.topCol2) : null });
+      seg(sleeve, 1, sleeve >= 0.84 ? hand : C.skin);
+      if (has("wristbands")) seg(0.68, 0.78, C.accCol, { inf: 0.1, bias: 0.03, wrap: true });
+    }
     if (has("balloon")) {
       const hand = add(shR.t, mv(shR.m, [0, -(D.ah - D.aw * 0.5), 0]));
-      const bp = add(hand, [0.6 + 0.15 * sin(t * 1.3), 3.2 + 0.15 * sin(t * 1.7), 0.3]);
-      box({ m: rotY(0.4 * sin(t * 0.7)), t: bp }, [0, 0.55, 0], [0.95, 1.1, 0.95], C.accCol, { deco: P => P.side && P.ell(0.3, 0.3, 0.08, 0.12, WHITE, 1, 0.6) });
-      box({ m: I3, t: bp }, [0, -0.05, 0], [0.16, 0.12, 0.16], C.accCol);
-      extras.push({ kind: "line", a: hand, b: add(bp, [0, -0.1, 0]) });
+      const bf = { m: rotY(0.4 * sin(t * 0.7)), t: add(hand, [0.6 + 0.15 * sin(t * 1.3), 3.2 + 0.15 * sin(t * 1.7), 0.3]) };
+      const bp = [box(bf, [0, 0.55, 0], [0.95, 1.1, 0.95], C.accCol, { grp: "balloon", deco: P => P.side && P.ell(0.3, 0.3, 0.08, 0.12, WHITE, 1, 0.6) }), box(bf, [0, -0.05, 0], [0.16, 0.12, 0.16], C.accCol, { grp: "balloon" })];
+      pushFrame(bf, bp, parts.filter(p => p.grp !== "balloon" && !p.alpha), 2.5);
+      extras.push({ kind: "line", a: hand, b: add(bf.t, [0, -0.1, 0]) });
     }
     return { parts, extras, root, torso, neck, shL, shR, hipL, hipR };
+  }
+
+  // Used only by the automated overlap check: which pairs of blocks cut into each other.
+  function overlapReport(rig, tol = 0.03) {
+    const out = [], P = rig.parts.filter(p => !p.alpha).map(p => ({ p, poly: polyOf(p) }));
+    const contains = (W, o) => {
+      const wp = W.pts || [0, 1, 2, 3, 4, 5, 6, 7].map(i => [W.c[0] + (i & 1 ? 0.5 : -0.5) * W.s[0], W.c[1] + (i & 2 ? 0.5 : -0.5) * W.s[1], W.c[2] + (i & 4 ? 0.5 : -0.5) * W.s[2]]);
+      const mn = k => Math.min(...wp.map(q => q[k])), mx = k => Math.max(...wp.map(q => q[k]));
+      const ylo = mn(1), yhi = mx(1), oc = cornersOf(o).map(q => toLocal(W.j, q));
+      const pts = oc.filter(q => q[1] >= ylo && q[1] <= yhi);
+      for (const [a, b] of EDGES) for (const yy of [ylo, yhi]) { const p = oc[a], q = oc[b]; if ((p[1] - yy) * (q[1] - yy) < 0) { const k = (yy - p[1]) / (q[1] - p[1]); pts.push([p[0] + (q[0] - p[0]) * k, yy, p[2] + (q[2] - p[2]) * k]); } }
+      return pts.every(q => q[0] >= mn(0) - 0.02 && q[0] <= mx(0) + 0.02 && q[2] >= mn(2) - 0.02 && q[2] <= mx(2) + 0.02);
+    };
+    for (let i = 0; i < P.length; i++) for (let k = i + 1; k < P.length; k++) {
+      const a = P[i].p, b = P[k].p;
+      if (a.grp && a.grp === b.grp) continue;
+      const pair = [a.grp, b.grp].sort().join("+");
+      if (/^(leg[LR])\+skirt$|^skirt\+(leg[LR])$|^skirt\+torso$/.test(pair)) continue;   // legs leave through the hem; the waist is built on the torso
+      const r = sat(P[i].poly, P[k].poly);
+      if (r.depth <= tol) continue;
+      if ((a.wrap && contains(a, b)) || (b.wrap && contains(b, a))) continue;
+      out.push({ pair, a: a.kind || a.grp, b: b.kind || b.grp, depth: +r.depth.toFixed(3), axis: r.axis.map(v => +v.toFixed(2)), ya: [Math.min(...P[i].poly.v.map(q => q[1])), Math.max(...P[i].poly.v.map(q => q[1]))].map(v => +v.toFixed(2)), yb: [Math.min(...P[k].poly.v.map(q => q[1])), Math.max(...P[k].poly.v.map(q => q[1]))].map(v => +v.toFixed(2)) });
+    }
+    return out;
   }
 
   /* ================= face & clothing decoration ================= */
@@ -940,7 +1171,7 @@
         if (multi) {
           let arr = look[key].slice();
           if (arr.includes(o.v)) arr = arr.filter(v => v !== o.v);
-          else { if (key === "acc" && BACK_SLOT.includes(o.v)) arr = arr.filter(v => !BACK_SLOT.includes(v)); arr.push(o.v); }
+          else arr = key === "acc" ? addAcc(arr, o.v) : arr.concat([o.v]);
           next[key] = arr;
         } else next[key] = o.v;
         setLook(next);
@@ -979,7 +1210,7 @@
       }
       case "bottom": S.push(tiles("bottom", "Bottoms"), colors("botCol", "Main color", PAL.cloth), colors("botCol2", "Accent color", PAL.cloth)); break;
       case "shoes": S.push(tiles("shoes", "Shoes"), colors("shoeCol", "Shoe color", PAL.cloth), colors("soleCol", "Sole and trim", PAL.cloth)); break;
-      case "extras": S.push(tiles("acc", "Accessories", { hint: "one back item at a time" }), colors("accCol", "Accessory color", PAL.cloth)); break;
+      case "extras": S.push(tiles("acc", "Accessories", { hint: "items that would overlap swap out" }), colors("accCol", "Accessory color", PAL.cloth)); break;
       case "emotes": {
         const grid = el("div", { class: "tiles emotes" });
         EMOTES.forEach(([id, label], i) => grid.append(el("button", { type: "button", id: `emote-${id}`, "aria-pressed": String(st.emote === id), on: { click: () => playEmote(st.emote === id ? null : id) } }, label, el("span", { text: i < 9 ? `key ${i + 1}` : " " }))));
@@ -1049,6 +1280,15 @@
   });
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) { st.spin = false; spinBtn.setAttribute("aria-pressed", "false"); }
 
+  if (window.__STUDIO_TEST__) window.__studio = {
+    setLook: l => setLook(l, false),
+    overlaps(anim, time) {
+      const D = dimsOf(look);
+      const pose = anim ? blend([{ pose: A[anim](time, { phase: time * 11, vy: 6 * cos(time * 3) }), w: 1 }]) : animate(0, D);
+      st.clock = time || 0; st.y = anim === "jump" ? 1.5 : 0; st.speed = anim === "run" ? 16 : anim === "walk" ? 8 : 0;
+      const r = overlapReport(buildRig(pose, D)); st.y = 0; st.speed = 0; return r;
+    },
+  };
   cam.focus = TABS.find(t => t.id === tab).focus;
   renderTabs(); renderPanel();
 
