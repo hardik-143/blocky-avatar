@@ -394,12 +394,16 @@
     const skirtLen = !skirtish ? 0 : look.top === "robe" ? D.lh * (1 - shoeH) - 0.12 : look.top === "dress" ? D.lh * 0.6 : D.lh * 0.48;
     const hiddenV = skirtLen / D.lh;
     const pantEnd = skirtish ? 0 : look.bottom === "shorts" ? 0.45 : 1 - shoeH;
+    const skirtCol = look.bottom === "skirt" && look.top !== "dress" && look.top !== "robe" ? C.botCol : C.topCol;
+    const isSteep = e => mv(euler(e), [0, -1, 0])[1] < -0.75;
     for (const [j, side, e] of [[hipL, 1, pose.legL], [hipR, -1, pose.legR]]) {
-      // a leg pointing mostly down leaves the skirt through the hem; one held forward (sitting) leaves through the front
-      const steep = mv(euler(e), [0, -1, 0])[1] < -0.6;
+      // A leg pointing mostly down leaves the skirt through the hem, so its thigh is hidden inside the skirt.
+      // A leg lifted forward or back (kick, sit, big strides) takes the skirt fabric with it instead.
+      const steep = isSteep(e);
       const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side, steep }, o)); };
       const pants = look.top === "spacesuit" && look.bottom === "pants" ? C.topCol : C.botCol;
       seg(0, pantEnd, pants, { deco: drawPants });
+      if (skirtish && !steep) seg(0, hiddenV, skirtCol, { inf: 0.1, bias: 0.02, deco: drawSkirt, fabric: true });
       seg(Math.max(pantEnd, hiddenV), 1 - shoeH, C.skin);
       if (shoeH > 0) {
         if (look.shoes === "sandals") seg(1 - shoeH, 1, C.soleCol, { deco: P => P.side && P.quad(0, 1, -2.5, -1.2, C.shoeCol) });
@@ -415,11 +419,12 @@
     if (skirtish) {
       // The skirt is a flared box re-shaped every frame: its waist is fixed, and its hem
       // stretches to wrap wherever each leg is at the hem's length. Legs can only leave through the hem.
-      const col = look.bottom === "skirt" && look.top !== "dress" && look.top !== "robe" ? C.botCol : C.topCol;
+      const col = skirtCol;
       const m = 0.12, top = 0.16, wx = D.tw / 2 + 0.08, wz = D.td / 2 + 0.16;
       const fz = 0.12 + 0.08 * skirtLen;
       let x0 = -(wx + 0.05), x1 = wx + 0.05, z0 = -(wz + fz), z1 = wz + fz, yb = -skirtLen;
       for (const [e, px] of [[pose.legL, hx], [pose.legR, -hx]]) {
+        if (!isSteep(e)) continue;   // lifted legs carry their own fabric, so the skirt doesn't stretch to them
         const R = euler(e);
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
           const p = add([px, 0, 0], mv(R, [sx * D.lw / 2, -skirtLen, sz * D.lw / 2]));
@@ -427,6 +432,8 @@
           x0 = Math.min(x0, p[0] - m); x1 = Math.max(x1, p[0] + m); z0 = Math.min(z0, p[2] - m); z1 = Math.max(z1, p[2] + m);
         }
       }
+      // never let the hem sink into the ground (sitting, kneeling)
+      if (abs(pose.root[0]) < 0.3 && abs(pose.root[2]) < 0.3) yb = Math.max(yb, -rootY + st.y + 0.04);
       const pts = [];
       for (let i = 0; i < 8; i++) pts.push(i & 2 ? [i & 1 ? wx : -wx, top, i & 4 ? wz : -wz] : [i & 1 ? x1 : x0, yb, i & 4 ? z1 : z0]);
       box(root, null, null, col, { kind: "skirt", pts, hemY: yb, bias: 0.04, deco: drawSkirt });
@@ -457,20 +464,25 @@
         break;
       case "afro": H([0, h + 0.2, -0.04], [w + 0.7, 0.78, d + 0.7], { top: true }); back(h * 0.75); sides(h * 0.4, 0.2); break;
       case "bob": top(); fringe(0.34); back(h * 0.88); sides(h * 0.82, 0.18, d + 0.1); break;
-      case "long": top(); fringe(0.2); H([0, h - (h + 0.9) / 2 + 0.1, -(d / 2 + 0.07)], [w + 0.14, h + 1.1, 0.2]); sides(h * 0.95, 0.14); break;
+      case "long": top(); fringe(0.2); H([0, h - (h + 0.9) / 2 + 0.1, -Math.max(d / 2 + 0.07, D.td / 2 + 0.12)], [w + 0.14, h + 1.1, 0.2]); sides(h * 0.95, 0.14); break;
       case "ponytail": top(); back(h * 0.6); sides(h * 0.4); fringe(0.16);
         rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35 + 0.08 * sin(t * 3), 0, 0.05 * sin(t * 2)], [0, -0.55, -0.1], [0.42, 1.2, 0.42]);
         rotH([0, h * 0.82, -(d / 2 + 0.1)], [0.35, 0, 0], [0, -0.02, -0.08], [0.48, 0.16, 0.48], C.hairCol2); break;
       case "bun": top(); back(h * 0.55); sides(h * 0.35); fringe(0.14); H([0, h + 0.38, -0.12], [0.6, 0.5, 0.6], { top: true }); break;
       case "pigtails": top(); fringe(0.22); back(h * 0.6);
         for (const sx of [1, -1]) {
-          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * (0.3 + 0.05 * sin(t * 3 + sx))], [0, -0.5, 0], [0.36, 1.0, 0.36]);
-          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * 0.3], [0, -0.02, 0], [0.42, 0.14, 0.42], C.hairCol2);
+          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * (0.42 + 0.05 * sin(t * 3 + sx))], [0, -0.5, 0], [0.36, 1.0, 0.36]);
+          rotH([sx * (w / 2 + 0.12), h * 0.72, -0.1], [0.15, 0, sx * 0.42], [0, -0.02, 0], [0.42, 0.14, 0.42], C.hairCol2);
         } break;
       case "mohawk": H([0, h + 0.02, 0], [w * 0.5, 0.08, d + 0.04], { top: true }); back(h * 0.4);
         H([0, h + 0.22, 0], [0.32, 0.42, d + 0.14], { top: true }); H([0, h + 0.5, 0], [0.26, 0.16, d + 0.06], { top: true, col: C.hairCol2 }); break;
       case "braids": top(); fringe(0.18); back(h * 0.7);
-        for (const sx of [1, -1]) for (let i = 0; i < 4; i++) H([sx * (w / 2 + 0.1), h * 0.35 - i * 0.34, D.td / 2 - d / 2 + 0.2], [0.28, 0.32, 0.28], { col: i % 2 ? C.hairCol2 : C.hairCol, j: neck });
+        // upper links hug the sides of the head; links below the chin hang in front of the shoulders
+        for (const sx of [1, -1]) for (let i = 0; i < 5; i++) {
+          const y = h * 0.42 - i * 0.34, tip = i === 4;
+          const z = y > 0.15 ? d / 2 - 0.22 : Math.max(d / 2 - 0.22, D.td / 2 + 0.17);
+          H([sx * (w / 2 + 0.14), tip ? y + 0.08 : y, z], tip ? [0.22, 0.16, 0.22] : [0.28, 0.32, 0.28], { col: tip || i % 2 ? C.hairCol2 : C.hairCol });
+        }
         break;
     }
 
