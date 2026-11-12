@@ -21,30 +21,36 @@
     --chip: #f1f4f9;
     --accent: #2a5bd7;
     --accent-ink: #ffffff;
-    --stage-top: #cfe2ff;
-    --stage-bottom: #f5efe5;
-    --platform: #ffffff;
-    --platform-edge: #d4dae6;
+    /* scene: daytime baseplate */
+    --sky-top: #6fb3ff;
+    --sky-horizon: #d9efff;
+    --sky-below: #eaf5ff;
+    --ground-a: #7cbf5e;
+    --ground-b: #71b454;
+    --ground-side: #4c7c38;
+    --ground-side-2: #3d6a2c;
+    --cloud: rgba(255, 255, 255, 0.92);
+    --shadow: rgba(20, 35, 20, 0.28);
     --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
     --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #0c1018; --panel: #131a27; --fg: #e7ecf5; --muted: #98a3b9; --line: #263046; --chip: #1a2234;
-      --accent: #8aa8ff; --accent-ink: #0c1018; --stage-top: #1a2643; --stage-bottom: #0f131c; --platform: #2a3550; --platform-edge: #1a2235;
+      --accent: #8aa8ff; --accent-ink: #0c1018; --sky-top: #0b1630; --sky-horizon: #3d4c7c; --sky-below: #1b2546; --ground-a: #457a3e; --ground-b: #3f7138; --ground-side: #284a23; --ground-side-2: #1d3819; --cloud: rgba(200, 210, 240, 0.35); --shadow: rgba(0, 0, 0, 0.45);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --bg: #0c1018; --panel: #131a27; --fg: #e7ecf5; --muted: #98a3b9; --line: #263046; --chip: #1a2234;
-    --accent: #8aa8ff; --accent-ink: #0c1018; --stage-top: #1a2643; --stage-bottom: #0f131c; --platform: #2a3550; --platform-edge: #1a2235;
+    --accent: #8aa8ff; --accent-ink: #0c1018; --sky-top: #0b1630; --sky-horizon: #3d4c7c; --sky-below: #1b2546; --ground-a: #457a3e; --ground-b: #3f7138; --ground-side: #284a23; --ground-side-2: #1d3819; --cloud: rgba(200, 210, 240, 0.35); --shadow: rgba(0, 0, 0, 0.45);
     color-scheme: dark;
   }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
   [hidden] { display: none !important; }
   .app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 440px; }
-  .stage { position: relative; min-height: 0; background: linear-gradient(180deg, var(--stage-top), var(--stage-bottom)); }
+  .stage { position: relative; min-height: 0; background: var(--sky-horizon); }
   #view { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; }
   #view:active { cursor: grabbing; }
   #view:focus-visible { box-shadow: inset 0 0 0 3px var(--accent); }
@@ -155,9 +161,12 @@
   const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
   const WHITE = [255, 255, 255], INK = [27, 27, 38], GOLD = [242, 190, 60];
   const probe = document.createElement("span"); probe.style.display = "none"; document.body.appendChild(probe);
-  const cssColor = s => { probe.style.color = ""; probe.style.color = s.trim(); const m = getComputedStyle(probe).color.match(/[\d.]+/g) || [0, 0, 0]; return [+m[0], +m[1], +m[2]]; };
+  const cssColor = s => { probe.style.color = ""; probe.style.color = s.trim(); const m = getComputedStyle(probe).color.match(/[\d.]+/g) || [0, 0, 0]; return [+m[0], +m[1], +m[2], m[3] === undefined ? 1 : +m[3]]; };
   let TH = {};
-  function readTheme() { const cs = getComputedStyle(document.documentElement); TH = { platform: cssColor(cs.getPropertyValue("--platform")), edge: cssColor(cs.getPropertyValue("--platform-edge")), accent: cssColor(cs.getPropertyValue("--accent")) }; }
+  function readTheme() {
+    const cs = getComputedStyle(document.documentElement), g = n => cssColor(cs.getPropertyValue(n));
+    TH = { skyTop: g("--sky-top"), skyHorizon: g("--sky-horizon"), skyBelow: g("--sky-below"), groundA: g("--ground-a"), groundB: g("--ground-b"), side: g("--ground-side"), side2: g("--ground-side-2"), cloud: g("--cloud"), shadow: g("--shadow"), accent: g("--accent") };
+  }
   readTheme();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
   new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -356,7 +365,10 @@
     const torso = child(root, [0, 0, 0], euler(pose.torso));
     const neck = child(torso, [0, D.th, 0], euler(pose.head));
     const shY = D.th - D.aw * 0.5, shX = D.tw / 2 + D.aw / 2;
-    const shL = child(torso, [shX, shY, 0], euler(pose.armL)), shR = child(torso, [-shX, shY, 0], euler(pose.armR));
+    // with a skirt, hanging arms swing out a little so hands clear the hem
+    const skirtish = look.top === "dress" || look.top === "robe" || look.bottom === "skirt";
+    const armOut = skirtish ? 0.1 : 0;
+    const shL = child(torso, [shX, shY, 0], euler([pose.armL[0], pose.armL[1], pose.armL[2] + armOut])), shR = child(torso, [-shX, shY, 0], euler([pose.armR[0], pose.armR[1], pose.armR[2] - armOut]));
     const hx = D.tw / 2 - D.lw / 2;
     const hipL = child(root, [hx, 0, 0], euler(pose.legL)), hipR = child(root, [-hx, 0, 0], euler(pose.legR));
     const t = st.clock, w = D.hw, h = D.hh, d = D.hd;
@@ -378,13 +390,17 @@
     }
     // legs: trousers + skin + shoe
     const shoeH = { sneakers: 0.15, hightops: 0.27, boots: 0.36, sandals: 0.06, slippers: 0.12, barefoot: 0 }[look.shoes];
-    const skirtish = look.top === "dress" || look.top === "robe" || look.bottom === "skirt";
+    // under a skirt the thigh is never drawn: the leg starts where the hem ends
+    const skirtLen = !skirtish ? 0 : look.top === "robe" ? D.lh * (1 - shoeH) - 0.12 : look.top === "dress" ? D.lh * 0.6 : D.lh * 0.48;
+    const hiddenV = skirtLen / D.lh;
     const pantEnd = skirtish ? 0 : look.bottom === "shorts" ? 0.45 : 1 - shoeH;
-    for (const [j, side] of [[hipL, 1], [hipR, -1]]) {
-      const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side }, o)); };
+    for (const [j, side, e] of [[hipL, 1, pose.legL], [hipR, -1, pose.legR]]) {
+      // a leg pointing mostly down leaves the skirt through the hem; one held forward (sitting) leaves through the front
+      const steep = mv(euler(e), [0, -1, 0])[1] < -0.6;
+      const seg = (v0, v1, col, o = {}) => { if (v1 - v0 > 0.001) box(j, [0, -(v0 + v1) / 2 * D.lh, 0], [D.lw + (o.inf || 0), (v1 - v0) * D.lh, D.lw + (o.inf || 0)], col, Object.assign({ kind: "leg", side, steep }, o)); };
       const pants = look.top === "spacesuit" && look.bottom === "pants" ? C.topCol : C.botCol;
       seg(0, pantEnd, pants, { deco: drawPants });
-      seg(pantEnd, 1 - shoeH, look.shoes === "barefoot" && pantEnd >= 1 ? C.skin : C.skin);
+      seg(Math.max(pantEnd, hiddenV), 1 - shoeH, C.skin);
       if (shoeH > 0) {
         if (look.shoes === "sandals") seg(1 - shoeH, 1, C.soleCol, { deco: P => P.side && P.quad(0, 1, -2.5, -1.2, C.shoeCol) });
         else if (look.shoes === "slippers") box(j, [0, -D.lh + 0.13, 0.12], [D.lw + 0.18, 0.28, D.lw + 0.34], C.shoeCol, { kind: "leg", side, bias: 0.02, deco: P => P.face === "front" && (P.ell(0.3, 0.45, 0.08, 0.14, INK), P.ell(0.7, 0.45, 0.08, 0.14, INK)) });
@@ -397,9 +413,23 @@
 
     // skirts and long tops
     if (skirtish) {
-      const long = look.top === "robe", len = long ? D.lh - 0.25 : look.top === "dress" ? D.lh * 0.6 : D.lh * 0.48;
+      // The skirt is a flared box re-shaped every frame: its waist is fixed, and its hem
+      // stretches to wrap wherever each leg is at the hem's length. Legs can only leave through the hem.
       const col = look.bottom === "skirt" && look.top !== "dress" && look.top !== "robe" ? C.botCol : C.topCol;
-      box(root, [0, -len / 2 + 0.12, 0], [D.tw + 0.35, len, D.td + 0.45], col, { kind: "skirt", bias: 0.04, deco: drawSkirt });
+      const m = 0.12, top = 0.16, wx = D.tw / 2 + 0.08, wz = D.td / 2 + 0.16;
+      const fz = 0.12 + 0.08 * skirtLen;
+      let x0 = -(wx + 0.05), x1 = wx + 0.05, z0 = -(wz + fz), z1 = wz + fz, yb = -skirtLen;
+      for (const [e, px] of [[pose.legL, hx], [pose.legR, -hx]]) {
+        const R = euler(e);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          const p = add([px, 0, 0], mv(R, [sx * D.lw / 2, -skirtLen, sz * D.lw / 2]));
+          yb = Math.min(yb, p[1]);
+          x0 = Math.min(x0, p[0] - m); x1 = Math.max(x1, p[0] + m); z0 = Math.min(z0, p[2] - m); z1 = Math.max(z1, p[2] + m);
+        }
+      }
+      const pts = [];
+      for (let i = 0; i < 8; i++) pts.push(i & 2 ? [i & 1 ? wx : -wx, top, i & 4 ? wz : -wz] : [i & 1 ? x1 : x0, yb, i & 4 ? z1 : z0]);
+      box(root, null, null, col, { kind: "skirt", pts, hemY: yb, bias: 0.04, deco: drawSkirt });
     }
     if (look.top === "hoodie") box(torso, [0, D.th - 0.2, -(D.td / 2 + 0.14)], [D.tw * 0.7, 0.55, 0.28], mix(C.topCol, [0, 0, 0], 0.12), { bias: 0.02 });
     if (look.top === "spacesuit") box(torso, [0, D.th - 0.05, 0], [D.tw * 0.66, 0.2, D.td + 0.12], C.topCol2, { bias: 0.03 });
@@ -749,31 +779,75 @@
     ctx.restore();
   }
 
-  function drawStage() {
-    // platform disc + soft shadow
-    const ring = (r, y) => { const pts = []; for (let i = 0; i < 48; i++) { const t = (i / 48) * TAU; const s = project([cos(t) * r, y, sin(t) * r]); if (s) pts.push(s); } return pts; };
-    const side = ring(5.2, -0.35), top = ring(5.2, 0);
-    if (top.length > 3) {
-      ctx.beginPath(); side.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = rgbStr(TH.edge); ctx.fill();
-      ctx.beginPath(); top.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = rgbStr(TH.platform); ctx.fill();
-      const inner = ring(4.6, 0.001); ctx.beginPath(); inner.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.strokeStyle = rgbStr(TH.accent, 1, 0.25); ctx.lineWidth = 2; ctx.stroke();
+  /* ---- the world: sky, drifting clouds, and a floating green baseplate ---- */
+  const NEAR = 0.2, PLATE = 24, TILE = 4;
+  function clipNear(pts) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], ain = a[2] >= NEAR, bin = b[2] >= NEAR;
+      if (ain) out.push(a);
+      if (ain !== bin) { const t = (NEAR - a[2]) / (b[2] - a[2]); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, NEAR]); }
     }
-    const sh = ring(1.9 / (1 + st.y * 0.2), 0.01).map(p => p);
-    if (sh.length > 3) { ctx.beginPath(); sh.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fill(); }
+    return out;
+  }
+  function polyWorld(pts, fill) {
+    const c = clipNear(pts.map(toCam));
+    if (c.length < 3) return;
+    ctx.beginPath(); c.forEach((p, i) => { const s = proj(p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = fill; ctx.lineWidth = 1; ctx.stroke();
+  }
+  const CLOUDS = Array.from({ length: 9 }, (_, i) => ({ az: (i / 9) * TAU + sin(i * 7.1) * 0.3, el: 0.03 + ((i * 37) % 10) / 120, s: 14 + ((i * 53) % 10) }));
+  function drawWorld() {
+    // sky gradient that meets the horizon
+    const far = toCam(add(cam.pos, [cam.f[0] * 1000, 0, cam.f[2] * 1000]));
+    const hy = far[2] > 0 ? clamp(proj(far)[1], -H, H * 2) : H * 0.5, at = v => clamp(v / H, 0, 1);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgbStr(TH.skyTop)); g.addColorStop(at(hy), rgbStr(TH.skyHorizon)); g.addColorStop(Math.min(1, at(hy) + 0.0001), rgbStr(TH.skyHorizon)); g.addColorStop(1, rgbStr(TH.skyBelow));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = rgbStr(TH.cloud, 1, TH.cloud[3]);
+    for (const cl of CLOUDS) {
+      const az = cl.az + st.clock * 0.004, dir = [sin(az) * cos(cl.el), sin(cl.el), cos(az) * cos(cl.el)];
+      const cc = toCam(add(cam.pos, [dir[0] * 300, dir[1] * 300, dir[2] * 300]));
+      if (cc[2] < 1) continue;
+      const p = proj(cc), u = (cl.s * cam.F) / cc[2];
+      for (const [x, y, w, h] of [[-1, 0, 2.1, 0.7], [-0.45, -0.45, 1.3, 0.6], [0.5, -0.2, 1.0, 0.45]]) {
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(p[0] + x * u, p[1] + y * u, w * u, h * u, h * u * 0.3) : ctx.rect(p[0] + x * u, p[1] + y * u, w * u, h * u); ctx.fill();
+      }
+    }
+    // baseplate slab sides that face the camera, then the checker tiles with distance haze
+    const sides = [
+      { n: [0, 0, 1], pts: [[-PLATE, 0, PLATE], [PLATE, 0, PLATE], [PLATE, -1.4, PLATE], [-PLATE, -1.4, PLATE]], c: TH.side },
+      { n: [0, 0, -1], pts: [[PLATE, 0, -PLATE], [-PLATE, 0, -PLATE], [-PLATE, -1.4, -PLATE], [PLATE, -1.4, -PLATE]], c: TH.side },
+      { n: [1, 0, 0], pts: [[PLATE, 0, PLATE], [PLATE, 0, -PLATE], [PLATE, -1.4, -PLATE], [PLATE, -1.4, PLATE]], c: TH.side2 },
+      { n: [-1, 0, 0], pts: [[-PLATE, 0, -PLATE], [-PLATE, 0, PLATE], [-PLATE, -1.4, PLATE], [-PLATE, -1.4, -PLATE]], c: TH.side2 },
+    ];
+    for (const s of sides) if (dot(s.n, sub(cam.pos, s.pts[0])) > 0) polyWorld(s.pts, rgbStr(s.c));
+    const N = (PLATE * 2) / TILE;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const x0 = -PLATE + i * TILE, z0 = -PLATE + j * TILE;
+      const fog = clamp((Math.hypot(x0 + TILE / 2 - cam.pos[0], z0 + TILE / 2 - cam.pos[2]) - 22) / 60, 0, 0.45);
+      polyWorld([[x0, 0, z0], [x0 + TILE, 0, z0], [x0 + TILE, 0, z0 + TILE], [x0, 0, z0 + TILE]], rgbStr(mix((i + j) % 2 ? TH.groundA : TH.groundB, TH.skyHorizon, fog)));
+    }
+    // soft shadow that shrinks while jumping
+    const s = 1 / (1 + st.y * 0.25), sh = [];
+    for (let i = 0; i < 28; i++) { const t = (i / 28) * TAU; sh.push([cos(t) * 2.0 * s, 0.02, sin(t) * 1.4 * s]); }
+    polyWorld(sh, rgbStr(TH.shadow, 1, TH.shadow[3] * s));
   }
 
   function drawAvatar(rig, pose) {
     const items = [], glass = [];
     for (const part of rig.parts) {
-      const hx = part.s[0] / 2, hy = part.s[1] / 2, hz = part.s[2] / 2, Wc = new Array(8), Sc = new Array(8);
+      const Wc = new Array(8), Sc = new Array(8);
       let ok = true;
       for (let i = 0; i < 8; i++) {
-        Wc[i] = add(part.j.t, mv(part.j.m, [part.c[0] + (i & 1 ? hx : -hx), part.c[1] + (i & 2 ? hy : -hy), part.c[2] + (i & 4 ? hz : -hz)]));
+        // a part is either a box (centre + size) or eight explicit corners (the flared skirt)
+        const local = part.pts ? part.pts[i] : [part.c[0] + (i & 1 ? 1 : -1) * part.s[0] / 2, part.c[1] + (i & 2 ? 1 : -1) * part.s[1] / 2, part.c[2] + (i & 4 ? 1 : -1) * part.s[2] / 2];
+        Wc[i] = add(part.j.t, mv(part.j.m, local));
         Sc[i] = project(Wc[i]); if (!Sc[i]) ok = false;
       }
       if (!ok) continue;
       for (const f of FACES) {
-        const nW = mv(part.j.m, f.n);
+        const nW = part.pts ? norm(cross(sub(Wc[f.idx[3]], Wc[f.idx[0]]), sub(Wc[f.idx[1]], Wc[f.idx[0]]))) : mv(part.j.m, f.n);
         const ctr = [0, 0, 0]; for (const i of f.idx) { ctr[0] += Wc[i][0] / 4; ctr[1] += Wc[i][1] / 4; ctr[2] += Wc[i][2] / 4; }
         const eye = sub(cam.pos, ctr);
         if (dot(nW, eye) <= 0) continue;
@@ -786,8 +860,7 @@
     }
     items.sort((a, b) => b.d - a.d);
     ctx.lineJoin = "round";
-    for (const F of items) {
-      if (F.line) { ctx.beginPath(); ctx.moveTo(F.line[0][0], F.line[0][1]); ctx.lineTo(F.line[1][0], F.line[1][1]); ctx.strokeStyle = "rgba(240,240,240,0.9)"; ctx.lineWidth = 1.2; ctx.stroke(); continue; }
+    const paint = F => {
       const p = F.part;
       let col = p.col;
       if (p.kind === "arm" && F.face === "bottom" && p.col === C.topCol) col = C.skin;
@@ -795,6 +868,29 @@
       ctx.fillStyle = rgbStr(col, F.light); ctx.fill();
       ctx.strokeStyle = rgbStr(col, F.light * 0.74); ctx.lineWidth = 0.8; ctx.stroke();
       if (p.deco) { const P = makePainter(F.pts, F.light, p, F.face); p.deco(P, pose); }
+    };
+    for (const F of items) {
+      if (F.line) { ctx.beginPath(); ctx.moveTo(F.line[0][0], F.line[0][1]); ctx.lineTo(F.line[1][0], F.line[1][1]); ctx.strokeStyle = "rgba(240,240,240,0.9)"; ctx.lineWidth = 1.2; ctx.stroke(); continue; }
+      paint(F);
+    }
+    // Legs only leave a skirt through its hem, so from any camera above the hem the skirt is in
+    // front of every leg it overlaps. Repaint the skirt inside each leg's outline to make that exact.
+    const skirt = rig.parts.find(p => p.kind === "skirt");
+    if (skirt) {
+      const hemP = add(skirt.j.t, mv(skirt.j.m, [0, skirt.hemY, 0])), hemN = mv(skirt.j.m, [0, 1, 0]);
+      if (dot(sub(cam.pos, hemP), hemN) > 0) {
+        const skirtFaces = items.filter(F => F.part === skirt && F.face !== "bottom");
+        for (const L of items) {
+          if (!L.part || L.part.kind !== "leg" || !L.part.steep) continue;
+          // grow the outline by ~1px so the leg's own edge stroke doesn't ghost through
+          const cx = L.pts.reduce((s, q) => s + q[0], 0) / L.pts.length, cy = L.pts.reduce((s, q) => s + q[1], 0) / L.pts.length;
+          const grown = L.pts.map(q => { const dx = q[0] - cx, dy = q[1] - cy, l = Math.hypot(dx, dy) || 1; return [q[0] + dx / l * 1.2, q[1] + dy / l * 1.2]; });
+          ctx.save();
+          ctx.beginPath(); grown.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.clip();
+          for (const F of skirtFaces) paint(F);
+          ctx.restore();
+        }
+      }
     }
     for (const F of glass.sort((a, b) => b.d - a.d)) {
       ctx.beginPath(); F.pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath();
@@ -806,7 +902,7 @@
   /* ================= input: orbit & zoom ================= */
   let drag = null;
   cvs.addEventListener("pointerdown", e => { cvs.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
-  cvs.addEventListener("pointermove", e => { if (!drag || drag.id !== e.pointerId) return; cam.yaw -= (e.clientX - drag.x) * 0.008; cam.pitch = clamp(cam.pitch + (e.clientY - drag.y) * 0.005, -0.25, 1.1); drag.x = e.clientX; drag.y = e.clientY; });
+  cvs.addEventListener("pointermove", e => { if (!drag || drag.id !== e.pointerId) return; cam.yaw -= (e.clientX - drag.x) * 0.008; cam.pitch = clamp(cam.pitch + (e.clientY - drag.y) * 0.005, 0.04, 1.1); drag.x = e.clientX; drag.y = e.clientY; });
   cvs.addEventListener("pointerup", () => (drag = null)); cvs.addEventListener("pointercancel", () => (drag = null));
   cvs.addEventListener("wheel", e => { e.preventDefault(); cam.zoom = clamp(cam.zoom * Math.exp(e.deltaY * 0.001), 0.55, 1.8); }, { passive: false });
 
@@ -958,8 +1054,7 @@
     if (pose.fx) { fxAcc += dt * (pose.fx === "tears" ? 5 : 3); while (fxAcc > 1) { fxAcc -= 1; spawnFx(pose.fx, rig, D); } }
     for (let i = particles.length - 1; i >= 0; i--) { const q = particles[i]; q.life -= dt; q.v[1] -= (q.g || 0) * dt; q.p = add(q.p, q.v.map(v => v * dt)); if (q.life <= 0) particles.splice(i, 1); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    drawStage();
+    drawWorld();
     drawAvatar(rig, pose);
     for (const q of particles) drawParticle(q);
     requestAnimationFrame(frame);
